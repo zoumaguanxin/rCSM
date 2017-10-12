@@ -1,8 +1,12 @@
 #include "CorrelativeMatch.hpp"
+#include "csm_ros.hpp"
 
-int main()
+int main(int argc,char** argv)
 {
-  Eigen::MatrixXf map=Eigen::MatrixXf::Zero(800,800);
-  cout<<map;
+ ros::init(argc,argv,"csm");
+ ros::NodeHandle n;
+ CSM_ROS::roscsm rcsm(n);
+ rcsm.init();
+ rcsm.run();
   
 }

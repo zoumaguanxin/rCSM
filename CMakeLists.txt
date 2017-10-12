@@ -3,9 +3,13 @@ cmake_minimum_required(VERSION 2.8)
 project(rcsm)
 
 find_package(catkin REQUIRED COMPONENTS
+roscpp
 tf
+tf2
 geometry_msgs
 sensor_msgs
+tf2_ros
+pcl_ros
 )
 
 find_package(Eigen3 REQUIRED)
