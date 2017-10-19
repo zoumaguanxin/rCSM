@@ -137,12 +137,12 @@ testrcsm: /usr/lib/x86_64-linux-gnu/libboost_signals.so
 testrcsm: /usr/lib/x86_64-linux-gnu/libboost_filesystem.so
 testrcsm: /opt/ros/indigo/lib/libxmlrpcpp.so
 testrcsm: /opt/ros/indigo/lib/libtf2.so
-testrcsm: /opt/ros/indigo/lib/libroscpp_serialization.so
 testrcsm: /opt/ros/indigo/lib/librosconsole.so
 testrcsm: /opt/ros/indigo/lib/librosconsole_log4cxx.so
 testrcsm: /opt/ros/indigo/lib/librosconsole_backend_interface.so
 testrcsm: /usr/lib/liblog4cxx.so
 testrcsm: /usr/lib/x86_64-linux-gnu/libboost_regex.so
+testrcsm: /opt/ros/indigo/lib/libroscpp_serialization.so
 testrcsm: /opt/ros/indigo/lib/librostime.so
 testrcsm: /usr/lib/x86_64-linux-gnu/libboost_date_time.so
 testrcsm: /opt/ros/indigo/lib/libcpp_common.so

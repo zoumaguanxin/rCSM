@@ -30,7 +30,8 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
       }
     }
   }
-  return K;
+  //除以最大数
+  return K/K.maxCoeff();
 }
 
 int main(int argc, char **argv) {

@@ -19,6 +19,8 @@ CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/geometry_msgs/Twist.
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/geometry_msgs/TwistStamped.h
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/geometry_msgs/Vector3.h
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/geometry_msgs/Vector3Stamped.h
+CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/nav_msgs/MapMetaData.h
+CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/nav_msgs/OccupancyGrid.h
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/octomap_msgs/Octomap.h
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/ros/advertise_options.h
 CMakeFiles/testrcsm.dir/test.cpp.o: /opt/ros/indigo/include/ros/advertise_service_options.h

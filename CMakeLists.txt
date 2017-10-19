@@ -10,6 +10,7 @@ geometry_msgs
 sensor_msgs
 tf2_ros
 pcl_ros
+nav_msgs
 )
 
 find_package(Eigen3 REQUIRED)

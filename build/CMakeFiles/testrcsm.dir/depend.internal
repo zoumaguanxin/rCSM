@@ -20,6 +20,8 @@ CMakeFiles/testrcsm.dir/test.cpp.o
  /opt/ros/indigo/include/geometry_msgs/TwistStamped.h
  /opt/ros/indigo/include/geometry_msgs/Vector3.h
  /opt/ros/indigo/include/geometry_msgs/Vector3Stamped.h
+ /opt/ros/indigo/include/nav_msgs/MapMetaData.h
+ /opt/ros/indigo/include/nav_msgs/OccupancyGrid.h
  /opt/ros/indigo/include/octomap_msgs/Octomap.h
  /opt/ros/indigo/include/ros/advertise_options.h
  /opt/ros/indigo/include/ros/advertise_service_options.h

@@ -20,19 +20,28 @@ using namespace std;
 
 namespace preDeal
 {
+  /**
+   * \brief Transform the point in matrix frame into real world frame. The default origin of world frame is in the centriod of matrix
+   */
   Eigen::Vector2f gird2world(const float &map_resolution, Eigen::Vector2i map_origin , const Eigen::Vector2i& position_grid)
   {
-    Eigen::Vector2f pos;
-    //x_in_map_frame=x_img_frame-map_origin_x_in_img_frame
-    //y_in_map_frame=map_origin_y_in_img_frame-y_in_img_frame
-    pos<<map_resolution*(map_origin(0)-position_grid(0)), map_resolution*(position_grid(1)-map_origin(1));
+    Eigen::Vector2f pos;  
+    //x_in_map_frame=map_origin_y_in_img_frame-y_in_img_frame
+    //y_in_map_frame=x_img_frame-map_origin_x_in_img_frame
+    //x_in_world=map_resolution*x_in_map_frame
+    //y_in_world=map_resolution*y_in_map_frame
+    pos<<map_resolution*(position_grid(1)-map_origin(1)),map_resolution*(map_origin(0)-position_grid(0));
     return pos;
   }
   
+  /**
+   * \brief Transform the point in real world frame  into matrix frame. 
+   */
  Eigen::Vector2i world2grid(const float &map_resolution, Eigen::Vector2i map_origin , Eigen::Vector2f& position)
  {
    Eigen::Vector2i x;
-   x<<map_origin(0)-floor(position(0)/map_resolution),floor(position(1)/map_resolution)+map_origin(1);
+   //通过上面反推
+   x<<floor(position(1)/map_resolution)+map_origin(1), map_origin(0)-floor(position(0)/map_resolution);
    return x;   
 }
 }
@@ -55,6 +64,7 @@ public:
     Eigen::MatrixXf map_(mapSizes_,mapSizes_);
    likehoodFiledMap=map_.setZero();
      map_origin<<int(mapSizes/2), int(mapSizes/2);
+     guassK=generateGuassKernal(Windowsizes);
   }
   
  float preScore(const Eigen::Vector2i& point)
@@ -62,8 +72,8 @@ public:
    float score_value;
    Eigen::Vector2f temp;
    temp=centriod-preDeal::gird2world(map_resolution,map_origin,point);   
-   cout<<temp<<endl;
-   score_value=1/(sqrt(2*3.141692f)*sigma)*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
+  // cout<<temp<<endl;
+   score_value=1/(2*3.141692f*pow(sigma,2))*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
    return score_value;
 }
 
@@ -76,25 +86,31 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   }
   Eigen::MatrixXf K;
   K.resize(sizes,sizes);
+  //只计算1/8的内容，其他全部复制
   for(int i=0;i<(sizes/2+1);i++)
   {
     for(int j=i;j<(sizes/2+1);j++)
     {
       Eigen::Vector2f temp;
       temp<<(sizes/2-i)*map_resolution,(sizes/2-j)*map_resolution;
-      K(i,j)=1/(sqrt(2*3.141692f)*sigma)*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
-      K(sizes-i-1,j)=K(i,j);
+      K(i,j)=1/((2*3.141692f)*pow(sigma,2))*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
+      //沿着以矩阵列方向中心线复制
+      K(i,sizes-j-1)=K(i,j);
       if(i!=j)
       {
+      //因为是对角矩阵,复制对角
       K(j,i)=K(i,j);
-      K(sizes-j-1,i)=K(j,i);
+      K(j,sizes-i-1)=K(j,i);
       }
       if((sizes-i-1)!=i)
       {
+      //以矩阵的行方向为中心线进行复制
       K.block(sizes-i-1,0,1,sizes)=K.block(i,0,1,sizes);
       }
     }
-  }  
+  }
+  //除以最大数，因为我们希望中心是最亮的
+  return K/K.maxCoeff();
 }
  
  /**
@@ -102,39 +118,56 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   */
  bool  smear()
   {
-    cout<<"smear begin"<<endl;
+    //cout<<"smear begin"<<endl;
     assert(point_cloud.points.size()>0); 
     //直接去生成一个高斯核矩阵，而不再这样转换过去在转换回来
     for(int i=0;i<point_cloud.points.size();i++)
     {      
-      centriod<<point_cloud.points[i].x,point_cloud.points[i].y;
+      //centriod<<point_cloud.points[i].x,point_cloud.points[i].y;
+      centriod(0)=point_cloud.points[i].x;
+      centriod(1)=point_cloud.points[i].y;
       Eigen::Vector2i centriod_gridType=preDeal::world2grid(map_resolution,map_origin,centriod);
-      int size_girdType=Windowsizes/map_resolution;
-      cout<<"smear size:"<<size_girdType<<endl;
-      cout<<Windowsizes<<endl;
+      int size_girdType=Windowsizes;
+      //cout<<"smear size:"<<size_girdType<<endl;
+      //cout<<Windowsizes<<endl;
       assert(size_girdType>0);
       assert((centriod_gridType(0)-size_girdType/2)>0);
-      for(int i=centriod_gridType(0)-size_girdType/2;i<centriod_gridType(0)+size_girdType/2;i++)
+   
+      for(int i=centriod_gridType(0)-size_girdType/2,m=0;i<centriod_gridType(0)+size_girdType/2;i++,m++)
       {
-	for(int j=centriod_gridType(0)-size_girdType/2;j<=centriod_gridType(0)+size_girdType/2;j++)
+	for(int j=centriod_gridType(1)-size_girdType/2,n=0;j<=centriod_gridType(1)+size_girdType/2;j++,n++)
 	{
-	  //i本身就表示y坐标方向上, j表示x坐标方向上
-	  Eigen::Vector2i point(i,j);
-	  cout<<preScore(point)<<endl;
-	  if(preScore(point)>likehoodFiledMap(i,j))
+	  if(guassK(m,n)>likehoodFiledMap(i,j))
+	  {
+	    if(m>=Windowsizes||n>=Windowsizes)
+	    {
+	      cout<<"矩阵索引超出边界"<<endl;
+	      assert(m<Windowsizes&&n<Windowsizes);
+	    }
+	    likehoodFiledMap(i,j)=guassK(m,n);
+	  }
+	  //j表示对用world的坐标系下x坐标方向上, i本身就表示y坐标方向上
+	  //Eigen::Vector2i point(j,i);
+	  //cout<<preScore(point)<<endl;
+	  /*
+	  if(preScore(point)>likehoodFiledMap(j,i))
 	  {
 	    //因为矩阵的行表示的y,列表示的是x
-	     likehoodFiledMap(i,j)=255*preScore(point);
-	     cout<<"score:"<<i<<" ,"<<j<<" "<<"score:"<<likehoodFiledMap(i,j)<<endl;
+	     likehoodFiledMap(j,i)=preScore(point);
+	    // cout<<"score:"<<i<<" ,"<<j<<" "<<"score:"<<likehoodFiledMap(i,j)<<endl;
 	  }
+	  */
 	}
       }
+      
     }
+    
       return true;
   }
   
   Eigen::MatrixXf getlikelihoodField()
   {
+    
     if(smear())
     return likehoodFiledMap;
   }
@@ -155,8 +188,8 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 private:
   //区域的中心
   Eigen::Vector2f centriod;
-  //更新的区域大小，Windowsizes * Windowsizes的区域，为float，表示区域
-  float Windowsizes;
+  //更新的区域大小，Windowsizes * Windowsizes的区域，为栅格个数，必须设置为奇数，表示区域
+  int Windowsizes;
   //用来计算概率
   float sigma;
   //存放点云，用来更新似然场
@@ -165,6 +198,7 @@ private:
   Eigen::MatrixXf likehoodFiledMap;
   int mapSizes;
   Eigen::Vector2i map_origin;
+  Eigen::MatrixXf guassK;
 };
 
 

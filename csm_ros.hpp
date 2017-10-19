@@ -6,6 +6,7 @@
 #include<geometry_msgs/TransformStamped.h>
 #include<tf2_ros/buffer.h>
 #include<octomap_msgs/Octomap.h>
+#include<nav_msgs/OccupancyGrid.h>
 
 namespace CSM_ROS{
 
@@ -25,7 +26,7 @@ void init()
 {
   ros::Subscriber subscan=nh.subscribe<sensor_msgs::LaserScan>("scan",10,boost::bind(&roscsm::callbackScan, this,_1));
  V_sub.push_back(subscan);
-  nh.param<float>("windowsize",windowsize,0.5f);
+  nh.param<int>("windowsize",windowsize,9);
   nh.param<int>("localmapsize",localmapsize,800);
   nh.param<float>("map_resolution",map_resolution,0.05);
   Eigen::Vector3f poseWindowsize_;
@@ -34,6 +35,8 @@ void init()
   poseWindowsize=poseWindowsize_;
   //nh.param<Eigen::Vector3f>("poseWindowsize",poseWindowsize,poseWindowsize_);
   nh.param<float>("sigma",sigma,0.1);
+  pubGridMap=nh.advertise<nav_msgs::OccupancyGrid>("gridMap",1);
+  pubpc=nh.advertise<sensor_msgs::PointCloud>("odompc",1);
 }
 
 
@@ -109,6 +112,7 @@ void run()
  while(ros::ok())
  {
     ros::spinOnce();
+    //是有问题的，上次的激光数据没有清零
    if(current_scan.ranges.size()>0)
    {     
 /*
@@ -118,11 +122,44 @@ void run()
     //cout<<windowsize<<endl;
      csm::likelihoodFiled llf(windowsize,sigma,map_resolution,localmapsize);
     sensor_msgs::PointCloud odompc;
+   
     if(scan2foopc(current_scan,"odom",odompc))
     {
+      pubpc.publish(odompc);
     cout<<"开始更新"<<endl;      
     Eigen::MatrixXf localmap=llf.update(odompc);
+    localmap=localmap/localmap.maxCoeff();
+    Eigen::MatrixXf gaussK;
+   gaussK= llf.generateGuassKernal(9);
+   localmap.block(10,10,9,9)=gaussK;
     //cout<<localmap;
+    nav_msgs::OccupancyGrid OG;
+    OG.header.stamp=ros::Time::now();
+    OG.header.frame_id="odom";
+    OG.info.height=localmapsize;
+    OG.info.width=localmapsize;
+    OG.info.resolution=map_resolution;
+    geometry_msgs::Point mapPosition;
+    //地图左下角在地图原点的位置
+    mapPosition.x=-localmapsize/2*0.05f;
+    mapPosition.y=-localmapsize/2*0.05f;
+    mapPosition.z=0.0f;
+    OG.info.origin.position=mapPosition;
+    for(int i=0;i<localmap.rows();i++)
+    {
+      for(int j=0;j<localmap.cols();j++)
+      {
+	if(localmap(i,j)==0)
+	{
+	  OG.data.push_back(-1);
+	}
+	else
+	{
+	  OG.data.push_back(100-ceil(localmap(i,j)*100));
+	}
+      }
+    }
+    pubGridMap.publish(OG);    
     }
     r.sleep();
    }
@@ -136,7 +173,7 @@ void run()
 private:
 ros::NodeHandle nh;
 sensor_msgs::LaserScan current_scan;
-float windowsize;
+int windowsize;
 int localmapsize;
 tf::TransformListener tf_listener;
 float map_resolution;
@@ -145,6 +182,7 @@ Eigen::Vector3f poseWindowsize;
 //订阅消息，必须具有静态生命周期，所以选择写为类的私有成员，在主程序中由于类的对象具有静态生命周期
 //所以该订阅者都具有静态生命周期，保证了在程序运行期间，该订阅者一直存在
 ros::V_Subscriber V_sub;
+ros::Publisher pubGridMap,pubpc;
 };
 
 }
