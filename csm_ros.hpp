@@ -8,6 +8,9 @@
 #include<octomap_msgs/Octomap.h>
 #include<nav_msgs/OccupancyGrid.h>
 
+
+#define pi 3.1415926  
+
 namespace CSM_ROS{
 
 class roscsm{
@@ -130,32 +133,43 @@ void run()
     Eigen::MatrixXf localmap=llf.update(odompc);
     localmap=localmap/localmap.maxCoeff();
     Eigen::MatrixXf gaussK;
+    //标记一下矩阵原点附近
    gaussK= llf.generateGuassKernal(9);
    localmap.block(10,10,9,9)=gaussK;
-    //cout<<localmap;
+ 
+   //用栅格地图表示出似然场
     nav_msgs::OccupancyGrid OG;
     OG.header.stamp=ros::Time::now();
     OG.header.frame_id="odom";
     OG.info.height=localmapsize;
     OG.info.width=localmapsize;
     OG.info.resolution=map_resolution;
+    
+    //矩阵坐标系在地图坐标系中的位置
     geometry_msgs::Point mapPosition;
-    //地图左下角在地图原点的位置
+    geometry_msgs::Quaternion map_orientation;
     mapPosition.x=-localmapsize/2*0.05f;
-    mapPosition.y=-localmapsize/2*0.05f;
+    mapPosition.y=localmapsize/2*0.05f;
     mapPosition.z=0.0f;
+    map_orientation.x=0;
+    map_orientation.y=0;
+    map_orientation.z=sin(-pi/4);
+    map_orientation.w=cos(-pi/4);
+    
+    //注意，在官方文件中说是row-major order. 也就是说是行元素的内存是连续的。但是行主序去赋值，画出来的图有问题，由于Eigen存储矩阵采用的是列主序，ROS都是基于Eigen写的，所以我认为实际是列主序才对
     OG.info.origin.position=mapPosition;
+    OG.info.origin.orientation=map_orientation;
     for(int i=0;i<localmap.rows();i++)
     {
       for(int j=0;j<localmap.cols();j++)
       {
-	if(localmap(i,j)==0)
+	if(localmap(j,i)==0)
 	{
 	  OG.data.push_back(-1);
 	}
 	else
 	{
-	  OG.data.push_back(100-ceil(localmap(i,j)*100));
+	  OG.data.push_back(100-ceil(localmap(j,i)*100));
 	}
       }
     }

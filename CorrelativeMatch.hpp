@@ -36,12 +36,16 @@ namespace preDeal
   
   /**
    * \brief Transform the point in real world frame  into matrix frame. 
+   * \param[in] map_origin 地图原点在矩阵坐标系下的坐标
+   * \param[in] map_resolution 地图的分辨率，单位是米
+   * \param[in] position 地图坐标系下点的位置
+   * \return 矩阵坐标系下点的位置
    */
  Eigen::Vector2i world2grid(const float &map_resolution, Eigen::Vector2i map_origin , Eigen::Vector2f& position)
  {
    Eigen::Vector2i x;
    //通过上面反推
-   x<<floor(position(1)/map_resolution)+map_origin(1), map_origin(0)-floor(position(0)/map_resolution);
+   x<<map_origin(0)-floor(position(1)/map_resolution),floor(position(0)/map_resolution)+map_origin(1);
    return x;   
 }
 }
@@ -51,7 +55,7 @@ namespace csm{
 
 class likelihoodFiled{
 public:
-    float map_resolution;
+
   
   explicit likelihoodFiled(const float& Windowsizes_,
 		  const float  &sigma_ ,const float &map_resolution_ , const int &mapSizes_)
@@ -67,6 +71,7 @@ public:
      guassK=generateGuassKernal(Windowsizes);
   }
   
+  /*
  float preScore(const Eigen::Vector2i& point)
  {
    float score_value;
@@ -76,6 +81,7 @@ public:
    score_value=1/(2*3.141692f*pow(sigma,2))*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
    return score_value;
 }
+*/
 
 Eigen::MatrixXf generateGuassKernal(const int &sizes)
 {
@@ -120,7 +126,6 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   {
     //cout<<"smear begin"<<endl;
     assert(point_cloud.points.size()>0); 
-    //直接去生成一个高斯核矩阵，而不再这样转换过去在转换回来
     for(int i=0;i<point_cloud.points.size();i++)
     {      
       //centriod<<point_cloud.points[i].x,point_cloud.points[i].y;
@@ -146,22 +151,17 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 	    }
 	    likehoodFiledMap(i,j)=guassK(m,n);
 	  }
-	  //j表示对用world的坐标系下x坐标方向上, i本身就表示y坐标方向上
-	  //Eigen::Vector2i point(j,i);
-	  //cout<<preScore(point)<<endl;
 	  /*
-	  if(preScore(point)>likehoodFiledMap(j,i))
+	   Eigen::Vector2i point(i,j);
+	  if(preScore(point)>likehoodFiledMap(i,j))
 	  {
-	    //因为矩阵的行表示的y,列表示的是x
-	     likehoodFiledMap(j,i)=preScore(point);
+	       likehoodFiledMap(i,j)=preScore(point);
 	    // cout<<"score:"<<i<<" ,"<<j<<" "<<"score:"<<likehoodFiledMap(i,j)<<endl;
 	  }
 	  */
 	}
-      }
-      
-    }
-    
+      }      
+    }    
       return true;
   }
   
@@ -186,7 +186,9 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   }
   
 private:
-  //区域的中心
+
+   float map_resolution;
+   //区域的中心
   Eigen::Vector2f centriod;
   //更新的区域大小，Windowsizes * Windowsizes的区域，为栅格个数，必须设置为奇数，表示区域
   int Windowsizes;
@@ -196,9 +198,13 @@ private:
   sensor_msgs::PointCloud point_cloud;
   //似然场
   Eigen::MatrixXf likehoodFiledMap;
+  //决定似然场的大小
   int mapSizes;
+  //地图坐标系原点在矩阵坐标系下的位置，一般设置为在矩阵的中心
   Eigen::Vector2i map_origin;
+  //存放高斯核，用于更新似然场
   Eigen::MatrixXf guassK;
+
 };
 
 
