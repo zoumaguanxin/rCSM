@@ -15,16 +15,34 @@ namespace CSM_ROS{
 
 class roscsm{
 public:
+  
+ /**
+  * \brief the consrutor function. It is suggested that tf_listener is initialized by node and ros time although it is not neccessay to do this. 
+  */
 roscsm(ros::NodeHandle &n_):tf_listener(n_,ros::DURATION_MAX)
 {
   nh=n_;
 }
 
+/**
+ * \brief the call back function for receive the scan data
+ */
 void callbackScan(sensor_msgs::LaserScan::ConstPtr scanPtr)
 {
   current_scan=*scanPtr;  
 }
 
+
+/**
+ * \brief initialize some parameters include the windowsize, localmapsize, map_resolution and some publishers, Subscribers
+ * \param windowsize this is a parameter that represent the size of kernel matrix used to generate the likelihoodFiled. it is a ROS parameter, if the parameter server don't set its value, it wiil be set as default 9.
+ * \param sigma guass standard deviation for generating the likelihoodFiled
+ *\param localmapsize this decided the sizes of localmap. also  is a ROS parameter， default 800.
+ *\param map_resolution map resolution, the unit is meter. default 0.05.
+ * \param poseWindowsize_x default 1.0, unit is meter.
+ * \param poseWindowsize_y default 1.0 , unit meter.
+ * \param poseWindowsize_theta default pi*2/3, unit rad.
+ */
 void init()
 {
   ros::Subscriber subscan=nh.subscribe<sensor_msgs::LaserScan>("scan",10,boost::bind(&roscsm::callbackScan, this,_1));
@@ -32,22 +50,34 @@ void init()
   nh.param<int>("windowsize",windowsize,9);
   nh.param<int>("localmapsize",localmapsize,800);
   nh.param<float>("map_resolution",map_resolution,0.05);
-  Eigen::Vector3f poseWindowsize_;
-  poseWindowsize_.setOnes();
-  poseWindowsize_(2)=3.14*2/3.f;
-  poseWindowsize=poseWindowsize_;
-  //nh.param<Eigen::Vector3f>("poseWindowsize",poseWindowsize,poseWindowsize_);
   nh.param<float>("sigma",sigma,0.1);
+  nh.param<float>("poseWindowsize_x",poseWindowsize(0),0.3);
+  nh.param<float>("poseWindowsize_y",poseWindowsize(1),0.3);
+  nh.param<float>("poseWindowsize_theta",poseWindowsize(2),pi/3.f);
+  float pose_x_resolution, pose_y_resolution, pose_theta_resolution;
+  nh.param<float>("pose_x_resolution",pose_x_resolution,0.03);
+  nh.param<float>("pose_x_resolution",pose_y_resolution,0.03);
+  nh.param<float>("pose_x_resolution",pose_theta_resolution,1);
   pubGridMap=nh.advertise<nav_msgs::OccupancyGrid>("gridMap",1);
   pubpc=nh.advertise<sensor_msgs::PointCloud>("odompc",1);
+  pubfixedPC=nh.advertise<sensor_msgs::PointCloud>("fixedPC",1);
+   csm::likelihoodFiled llf_(windowsize,sigma,map_resolution,localmapsize);
+   csm::CorrelativeMatch rcsm_(poseWindowsize);
+   rcsm=rcsm_;
+   rcsm.setParam(pose_x_resolution,pose_y_resolution,pose_theta_resolution);
+   llf=llf_;
 }
 
-
-
-
+/**
+ * \brief this function is responsible for transforming scan into point cloud data in any target frame
+ *\param[in] curScan the scan data
+ *\param[in] target_frame you want to transform the curScan into target frame
+ *\param[out] pcout the point cloud in target frame 
+ * \return if the transform has been executed successsly, the function return true, otherwise false
+ */
 bool scan2foopc( const sensor_msgs::LaserScan& curScan,const string &target_frame, sensor_msgs::PointCloud& pcout)
-{
-  
+{  
+  //首先转换为激光坐标系下的点云
    sensor_msgs::PointCloud pcin;
   for(int i=0;i<curScan.ranges.size();i++)
   {
@@ -60,77 +90,90 @@ bool scan2foopc( const sensor_msgs::LaserScan& curScan,const string &target_fram
     pcin.points.push_back(point);
     }
   }
-  pcin.header.frame_id=curScan.header.frame_id;
-  cout<<"scan frame:"<<current_scan.header.frame_id<<endl;
-  pcin.header.stamp=current_scan.header.stamp;
-  cout<<"this is executed"<<endl;
-  
-  bool transflag=false;
-  geometry_msgs::TransformStamped tfstamp;
- // if(tf_listener.canTransform(target_frame,current_scan.header.frame_id,ros::Time(0)))
-  //{
- 
-try{
-  tf_listener.transformPointCloud(target_frame,pcin,pcout);
-  transflag=true;
-  cout<<"transform is ok"<<endl;
+      pcin.header.frame_id=curScan.header.frame_id;
+      pcin.header.stamp=current_scan.header.stamp;
+      
+      //使用transform进行转换
+      bool transflag=false;
+      geometry_msgs::TransformStamped tfstamp;
+      try{
+	    tf_listener.transformPointCloud(target_frame,pcin,pcout);
+	    transflag=true;
+	    cout<<"transform is ok"<<endl;
+	}
+     catch(tf::TransformException &ex)
+       {
+	ROS_ERROR("%s",ex.what());
+	ros::Duration(1.0).sleep();  
+       }
+    return transflag; 
 }
-  catch(tf::TransformException &ex)
-  {
-    ROS_ERROR("%s",ex.what());
-    ros::Duration(1.0).sleep();  
+
+
+bool getPose(const string &target_frame, const string &source_frame, const ros::Time&time, Eigen::Vector3f &pose)
+{
+  tf::StampedTransform odompose;
+  bool flag=false;
+  try{
+    tf_listener.lookupTransform(target_frame,source_frame,time,odompose);
+    flag=true;
   }
-//   }
-//   else{
-//     return transflag;
-//   }
-  return transflag; 
+  catch(tf::LookupException &ex)
+  {
+	ROS_ERROR("%s",ex.what());
+	ros::Duration(1.0).sleep();  
+  }
+  pose(0)=odompose.getOrigin().x();
+  pose(1)=odompose.getOrigin().y();
+  pose(2)=tf::getYaw(odompose.getRotation());
+  return flag;
 }
 
 
 void run()
 {  
-  
-//   bool getpose=false;
-//   tf::StampedTransform laser2odom;
-//   // geometry_msgs::TransformStamped laser2odom;
-//   //  tf2_ros::Buffer tfBuffer;
-//    //tf2_ros::TransformListener tf_listener(tfBuffer);
-//    while(!getpose)
-//    {
-//    try{
-//     //laser2odom= tfBuffer.lookupTransform("odom","laser",ros::Time(0));
-//      double t=10000.0;
-//       tf_listener.waitForTransform("/odom","/laser",ros::Time(0),ros::Duration(t));
-//       tf_listener.lookupTransform("/odom","/laser",ros::Time(0),laser2odom);
-//    getpose=true;
-//     }
-//     catch(tf2::LookupException &ex)
-//     {
-//       ROS_ERROR("%s",ex.what());
-//       ros::Duration(1.0).sleep();  
-//     }
-//    }
+
   ros::Rate r(50);
  while(ros::ok())
  {
     ros::spinOnce();
     //是有问题的，上次的激光数据没有清零
-   if(current_scan.ranges.size()>0)
+   if(!current_scan.ranges.empty())
    {     
-/*
+   /*
     Eigen::Vector3f poseWindowCentriod;
     poseWindowCentriod<<laser2odom.getOrigin().getX(),laser2odom.getOrigin().getY(),2*acos(laser2odom.getRotation().getW());*/
     //创建似然场
     //cout<<windowsize<<endl;
-     csm::likelihoodFiled llf(windowsize,sigma,map_resolution,localmapsize);
-    sensor_msgs::PointCloud odompc;
-   
+
+    sensor_msgs::PointCloud odompc,fixedpc; 
+    Eigen::MatrixXf localmap;
     if(scan2foopc(current_scan,"odom",odompc))
     {
-      pubpc.publish(odompc);
-    cout<<"开始更新"<<endl;      
-    Eigen::MatrixXf localmap=llf.update(odompc);
+      //发布用odom转换得到的点云。
+     pubpc.publish(odompc);
+     
+     //csm
+     if(!rcsm.llfIsEmpty())
+     {
+       Eigen::Vector3f poseWindowCentriod;
+       if(getPose("odom","laser",ros::Time(0),poseWindowCentriod))
+       {
+	 Eigen::Vector3f updatedPose;
+         updatedPose=rcsm.getCorrelativePose(current_scan,poseWindowCentriod);
+	 //preDeal::transformPC(current_scan,fixedpc,updatedPose,"odom");
+	 preDeal::transformPC(current_scan,fixedpc,poseWindowCentriod,"odom");
+	 pubfixedPC.publish(fixedpc);
+	 localmap=llf.update(fixedpc);
+       }
+    }
+    else
+    {
+      localmap=llf.update(odompc);
+    }
+    
+    cout<<"开始更新似然场"<<endl;     
+    // localmap=llf.update(odompc);
     localmap=localmap/localmap.maxCoeff();
     Eigen::MatrixXf gaussK;
     //标记一下矩阵原点附近
@@ -163,23 +206,22 @@ void run()
     {
       for(int j=0;j<localmap.cols();j++)
       {
-	if(localmap(j,i)==0)
+	if(localmap(i,j)==0)
 	{
 	  OG.data.push_back(-1);
 	}
 	else
 	{
-	  OG.data.push_back(100-ceil(localmap(j,i)*100));
+	  OG.data.push_back(100-ceil(localmap(i,j)*100));
 	}
       }
     }
-    pubGridMap.publish(OG);    
+    pubGridMap.publish(OG);
+    rcsm.updataikehoodField(llf);
     }
     r.sleep();
    }
  }
-//csm::CorrelativeMatch rcsm(current_scan,poseWindowCentriod,poseWindowsize,scan2pointCloud,windowsize,sigma,map_resolution);
-//rcsm.setParam(0.05,0.05,1);
 }
 
 
@@ -189,6 +231,8 @@ ros::NodeHandle nh;
 sensor_msgs::LaserScan current_scan;
 int windowsize;
 int localmapsize;
+csm::CorrelativeMatch rcsm;
+csm::likelihoodFiled llf;
 tf::TransformListener tf_listener;
 float map_resolution;
 float sigma;
@@ -196,7 +240,7 @@ Eigen::Vector3f poseWindowsize;
 //订阅消息，必须具有静态生命周期，所以选择写为类的私有成员，在主程序中由于类的对象具有静态生命周期
 //所以该订阅者都具有静态生命周期，保证了在程序运行期间，该订阅者一直存在
 ros::V_Subscriber V_sub;
-ros::Publisher pubGridMap,pubpc;
+ros::Publisher pubGridMap,pubpc, pubfixedPC;
 };
 
 }

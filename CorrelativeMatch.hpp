@@ -15,6 +15,8 @@
 //#include<csm/csm.h>
 
 #include<cmath>
+#include <boost/graph/graph_concepts.hpp>
+
 
 using namespace std;
 
@@ -48,6 +50,73 @@ namespace preDeal
    x<<map_origin(0)-floor(position(1)/map_resolution),floor(position(0)/map_resolution)+map_origin(1);
    return x;   
 }
+
+/**
+ * \brief Transform scan into point cloud
+ * \param[in] scan the scan data
+ * \param[out] pcout the point cloud in scan frame
+ */
+void  scan2pc(const sensor_msgs::LaserScan &scan, sensor_msgs::PointCloud &pcout)
+{
+  if(scan.ranges.empty())
+  {
+    cout<<"failed to Transform scan into point cloud because the scan is empty"<<endl;
+    assert(scan.ranges.size()>0);
+  }
+  pcout.points.reserve(scan.ranges.size());
+   for(int i=0;i<scan.ranges.size();i++)
+  {
+    geometry_msgs::Point32 point;
+    if(scan.ranges[i]<scan.range_max)
+    {
+    point.x=scan.ranges[i]*cos(scan.angle_min+i*scan.angle_increment);
+    point.y=scan.ranges[i]*sin(scan.angle_min+i*scan.angle_increment);
+    point.z=0;
+    pcout.points.push_back(point);
+    }
+  }
+      pcout.header.frame_id=scan.header.frame_id;
+      pcout.header.stamp=scan.header.stamp;
+}
+
+void transformPC(const sensor_msgs::PointCloud& pcin, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
+{
+  if(!pcout.points.empty())
+  {
+    pcout.points.clear();    
+  }
+  Eigen::Quaternion<float> q(cos(pose3d(2)/2), 0,0,sin(pose3d(2)/2));
+  Eigen::Vector3f trans(pose3d(0),pose3d(1),0), transformedPoint, initPoint;
+  for(int i=0;i<pcin.points.size();i++)
+  {
+    initPoint<<pcin.points[i].x, pcin.points[i].y,0;
+    geometry_msgs::Point32 tempoint;
+    transformedPoint=q.toRotationMatrix()*initPoint+trans;
+    transformedPoint=q.toRotationMatrix().transpose()*initPoint+trans;
+    tempoint.x=transformedPoint(0); tempoint.y=transformedPoint(1);tempoint.z=0;
+    pcout.points.push_back(tempoint); 
+  }
+     pcout.header.frame_id=target_frame;    
+}
+
+void transformPC(const sensor_msgs::LaserScan &scan, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
+{
+  sensor_msgs::PointCloud pcin;
+  scan2pc(scan,pcin);
+  //pcout.points.clear();
+  Eigen::Quaternion<float> q(cos(pose3d(2)/2), 0,0,sin(pose3d(2)/2));
+  Eigen::Vector3f trans(pose3d(0),pose3d(1),0), transformedPoint, initPoint;
+  for(int i=0;i<pcin.points.size();i++)
+  {
+    initPoint<<pcin.points[i].x, pcin.points[i].y,0;
+    geometry_msgs::Point32 tempoint;
+    transformedPoint=q.toRotationMatrix()*initPoint+trans;
+    tempoint.x=transformedPoint(0); tempoint.y=transformedPoint(1);tempoint.z=0;
+    pcout.points.push_back(tempoint); 
+  }
+     pcout.header.frame_id=target_frame;    
+}
+
 }
 
 
@@ -56,20 +125,28 @@ namespace csm{
 class likelihoodFiled{
 public:
 
+  likelihoodFiled(){}
   
+  /**
+   * \brief constructor function
+   */
   explicit likelihoodFiled(const float& Windowsizes_,
 		  const float  &sigma_ ,const float &map_resolution_ , const int &mapSizes_)
   {
-
     Windowsizes=Windowsizes_;
     mapSizes=mapSizes_;
     sigma=sigma_;
     map_resolution=map_resolution_;
     Eigen::MatrixXf map_(mapSizes_,mapSizes_);
-   likehoodFiledMap=map_.setZero();
-     map_origin<<int(mapSizes/2), int(mapSizes/2);
-     guassK=generateGuassKernal(Windowsizes);
+    likehoodFiledMap=map_.setZero();
+    map_origin<<int(mapSizes/2), int(mapSizes/2);
+    guassK=generateGuassKernal(Windowsizes);
   }
+  
+  /*
+   * TODO 复制构造函数
+   * 
+   */
   
   /*
  float preScore(const Eigen::Vector2i& point)
@@ -165,17 +242,16 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
       return true;
   }
   
-  Eigen::MatrixXf getlikelihoodField()
-  {
-    
-    if(smear())
-    return likehoodFiledMap;
-  }
   
-  Eigen::MatrixXf update(const sensor_msgs::PointCloud &laser2mapPC)
+  
+  
+  /**
+   * \brief 是用点云更新，点云必须是已经为地图坐标系下
+   */
+  Eigen::MatrixXf update(const sensor_msgs::PointCloud &mapPC)
   {
-    assert(laser2mapPC.points.size()>0);
-    point_cloud=laser2mapPC;
+    assert(mapPC.points.size()>0);
+    point_cloud=mapPC;
     if(likehoodFiledMap.rows()!=mapSizes)
     {
       likehoodFiledMap.resize(mapSizes,mapSizes);
@@ -183,6 +259,23 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
     likehoodFiledMap.setZero();
     if(smear())
    return likehoodFiledMap;
+  }
+  
+  Eigen::MatrixXf getlikelihoodField()
+  {
+    
+    if(smear())
+    return likehoodFiledMap;
+  }
+  
+  float getMapResolution() const
+  {
+    return map_resolution;
+  }
+  
+  Eigen::Vector2i getMapOrigin() const
+  {
+    return map_origin;
   }
   
 private:
@@ -204,122 +297,138 @@ private:
   Eigen::Vector2i map_origin;
   //存放高斯核，用于更新似然场
   Eigen::MatrixXf guassK;
-
 };
 
 
 
-
-// class CorrelativeMatch: public likelihoodFiled{
-//   
-// public:
-//   CorrelativeMatch(sensor_msgs::LaserScan scan_,  Eigen::Vector3f poseWindowCentriod_,  Eigen::Vector3f poseWindowSizes_,
-// 		   sensor_msgs::PointCloud scan2pointCloud, int Windowsizes_, float sigma_ ,  float map_resolution_, const int &mapsize_)
-//   :likelihoodFiled(scan2pointCloud,Windowsizes_,sigma_,map_resolution_,mapsize_)
-//   {
-//     poseWindowCentriod=poseWindowCentriod_;
-//     poseWindowSizes=poseWindowCentriod_;
-//     scan=scan_;
-//   }
-//   void setParam(const float &x_resolution_, const float &y_resolution_,const float &orientation_resolution_)
-//   {
-//     assert(x_resolution_>0&&y_resolution_>0&&orientation_resolution_>0);
-//     x_resolution=x_resolution_;
-//     y_resolution=y_resolution_;
-//     orientation_resolution=orientation_resolution_;
-//   }
-//   
-//   /**
-//    * \brief 创建pose搜索窗
-//    * \param[in] centriod 窗的中心
-//    * \param[in] sizes_ 窗的尺寸
-//    */
-//   void createSearchWindow(const Eigen::Vector3f &centriod_, const Eigen::Vector3f & sizes_)
-//   {
-//     poseWindowSizes=sizes_;
-//     poseWindowCentriod=centriod_;    
-//   }
-//     
-//   
-//   Eigen::Vector3f lookup() const
-//   {
-//     float score_Max=0;
-//     Eigen::Vector3f state_;
-//     for(int i=0;i<floor(poseWindowSizes(0)/x_resolution);i++) 
-//     {
-//       for(int j=0;j<floor(poseWindowSizes(1)/y_resolution);j++)
-//       {
-// 	for(int k=0;k<floor(poseWindowSizes(2)/orientation_resolution);i++)
-// 	{
-// 	  float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+i*x_resolution;
-// 	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+i*y_resolution;
-// 	  float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+i*orientation_resolution;
-// 	  tf::Transform tf_;
-// 	  tf::Quaternion q(0,0,sin(theta/2),cos(theta/2));
-// 	  tf::Vector3 Origin(pose_x,pose_y,0);	  
-// 	  tf_.setRotation(q);
-// 	  tf_.setOrigin(Origin);
-// 	  if(score(tf_)>score_Max)
-// 	  {
-// 	    score_Max=score(tf_);
-// 	    Eigen::Vector3f state_(pose_x,pose_y,theta);
-// 	  }	
-// 	}
-//       }
-//     }
-//     return state_;
-//   }
-//   
-//   //在点云常用的缩写是pc
-//   //需要验证，ros中所有的stampTransform代表的意思都是得到转换关系都是把child_frame_id数据处理到frame_id下，而且设置transform时，也是必须按照这个设置
-//   
-//   /**
-//    * \brief 对转换关系进行打分，分值等于所有的激光hits的点被转换到map坐标系下，在似然场中的分数的和
-//    * \param[in] tf_ laser到map的转换关系
-//    */
-//   float score(const tf::Transform &tf_) const
-//   {
-//     float tf_score=0;
-//     tf::StampedTransform tf__;
-//     tf__.child_frame_id_="laser";
-//     tf__.frame_id_="map";
-//     tf__.setOrigin(tf_.getOrigin());
-//     tf__.setRotation(tf_.getRotation());
-//     tf::TransformListener tf_lisenter;
-//    tf_lisenter.setTransform(tf__);
-//    sensor_msgs::PointCloud pcout;  
-//    tf_lisenter.transformPointCloud("map",currentPCinLaserFrame,pcout);
-//    for(int i=0;i<pcout.points.size();i++)
-//    {
-//      tf_score+=map(floor(pcout.points[i].x/map_resolution),floor(pcout.points[i].y/map_resolution));     
-//   }    
-//   }  
-//    
-//   void preComputeLikehoodField()
-//   {
-//     map=getlikelihoodField();  
-//   }
-//   
-//   Eigen::Vector3f getCorrelativePose()
-//   {
-//     preComputeLikehoodField();
-//     relativePose=lookup();
-//     return relativePose;
-//   }
-//   
-// private:
-//   float x_resolution;
-//   float y_resolution;
-//   float orientation_resolution;
-//   Eigen::Vector3f poseWindowCentriod;
-//   Eigen::Vector3f poseWindowSizes;
-//   Eigen::Vector3f relativePose;
-//   sensor_msgs::PointCloud subMapPC;
-//   sensor_msgs::LaserScan CurrentScan;
-//   sensor_msgs::PointCloud currentPCinLaserFrame;
-//  sensor_msgs::LaserScan scan;
-//  Eigen::MatrixXf map;
-// };
+class CorrelativeMatch{
+  
+public:
+  CorrelativeMatch()  {}
+  
+  CorrelativeMatch( Eigen::Vector3f poseWindowSizes_)
+  {
+    poseWindowSizes=poseWindowSizes_;
+  }
+  
+  /*
+   * 复制构造函数
+   * TODO
+   * 
+   */
+  
+  void setParam(const float &x_resolution_, const float &y_resolution_,const float &orientation_resolution_)
+  {
+    assert(x_resolution_>0&&y_resolution_>0&&orientation_resolution_>0);
+    x_resolution=x_resolution_;
+    y_resolution=y_resolution_;
+    orientation_resolution=orientation_resolution_;
+  }
+  
+ 
+ /**
+  * TODO
+  */
+  
+  Eigen::Vector3f lookup() const
+  {
+    float score_Max=0;
+    Eigen::Vector3f beset_state;
+    for(int i=0;i<floor(poseWindowSizes(0)/x_resolution);i++) 
+    {
+      for(int j=0;j<floor(poseWindowSizes(1)/y_resolution);j++)
+      {
+	for(int k=0;k<floor(poseWindowSizes(2)/orientation_resolution);k++)
+	{
+	  float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+i*x_resolution;
+	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+j*y_resolution;
+	  float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+k*orientation_resolution;
+	  tf::Transform tf_;
+	  tf::Quaternion q(0,0,sin(theta/2),cos(theta/2));
+	  tf::Vector3 Origin(pose_x,pose_y,0);	  
+	  tf_.setRotation(q);
+	  tf_.setOrigin(Origin);
+	  if(score(tf_)>score_Max)
+	  {
+	    score_Max=score(tf_);
+	    Eigen::Vector3f state(pose_x,pose_y,theta);
+	    beset_state=state;
+	  }
+	}
+      }
+    }
+    return beset_state;
+    //return poseWindowCentriod;
+  }
+  
+  //在点云常用的缩写是pc
+  //需要验证，ros中所有的stampTransform代表的意思都是得到转换关系都是把child_frame_id数据处理到frame_id下，而且设置transform时，也是必须按照这个设置
+  
+  /**
+   * \brief 对转换关系进行打分，分值等于所有的激光hits的点被转换到map坐标系下，在似然场中的分数的和
+   * \param[in] tf_ laser到map的转换关系
+   */
+  float score(const tf::Transform &tf_) const
+  {
+    float tf_score=0;        
+   for(int i=0;i<currentPCinLaserFrame.points.size();i++)
+   {
+     Eigen::Vector2i temIndex;
+     Eigen::Vector3f tempoint;
+     Eigen::Vector2f point2d;
+     tempoint<<currentPCinLaserFrame.points[i].x, currentPCinLaserFrame.points[i].y,0;
+     Eigen::Quaternion<float> q(tf_.getRotation().w(),tf_.getRotation().x(),tf_.getRotation().y(),tf_.getRotation().z());
+     Eigen::Vector3f trans(tf_.getOrigin().x(),tf_.getOrigin().y(),tf_.getOrigin().z());
+     tempoint=q.toRotationMatrix()*tempoint+trans;
+     point2d<<tempoint(0),tempoint(1);
+     temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
+     if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
+     tf_score+=llfmap(temIndex(0),temIndex(1));     
+  }    
+  }  
+  
+  /**
+   * \brief update likehood field
+   * \param[in] llf_ 用于计算的似然场 
+   */
+  void updataikehoodField(const likelihoodFiled &llf_)
+  {
+    llf=llf_;
+    llfmap=llf.getlikelihoodField();  
+  }
+  
+  
+  bool llfIsEmpty()
+  {
+    if(llfmap.cols()==0)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+  
+  Eigen::Vector3f getCorrelativePose(const sensor_msgs::LaserScan & scan_,const Eigen::Vector3f &poseWindowCentriod_)
+  {
+    preDeal::scan2pc(scan_,currentPCinLaserFrame);
+    poseWindowCentriod=poseWindowCentriod_;
+    relativePose=lookup();
+    return relativePose;
+  }
+  
+private:
+  float x_resolution;
+  float y_resolution;
+  float orientation_resolution;
+  Eigen::Vector3f poseWindowCentriod;
+  Eigen::Vector3f poseWindowSizes;
+  Eigen::Vector3f relativePose;
+  sensor_msgs::PointCloud currentPCinLaserFrame;
+ likelihoodFiled llf;
+ Eigen::MatrixXf llfmap;
+};
 
 
 }
