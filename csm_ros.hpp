@@ -41,7 +41,10 @@ void callbackScan(sensor_msgs::LaserScan::ConstPtr scanPtr)
  *\param map_resolution map resolution, the unit is meter. default 0.05.
  * \param poseWindowsize_x default 1.0, unit is meter.
  * \param poseWindowsize_y default 1.0 , unit meter.
- * \param poseWindowsize_theta default pi*2/3, unit rad.
+ * \param poseWindowsize_theta default pi/3.f, unit rad.
+ * \param pose_x_resolution default 0.03
+ * \param pose_y_resolution default 0.03
+ * \param pose_theta_resolution default 1/180*3.14*2 
  */
 void init()
 {
