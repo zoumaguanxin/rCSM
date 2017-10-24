@@ -79,6 +79,14 @@ void  scan2pc(const sensor_msgs::LaserScan &scan, sensor_msgs::PointCloud &pcout
       pcout.header.stamp=scan.header.stamp;
 }
 
+
+/**
+ * \brief transform point cloud into target_frame using pose3d, it is noted that the transform only is suitable for 2D situation
+ * \param[in] pcin the point cloud to transform
+ * \param[out] pcout the point cloud transformed
+ * \param[in] pose3d the pose of pcin in target_frame, it is noted that rotation represent the transform from pc_frame into target_frame
+ * \param[in] target_frame it is used to label the pcout
+ */
 void transformPointCloud(const sensor_msgs::PointCloud& pcin, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
 {
   if(!pcout.points.empty())
@@ -163,6 +171,10 @@ public:
 }
 */
 
+  /**
+   * \brief generate a guassian kernel matrix ,which is used to smear the likelihoodFiled
+   * \param[in] sizes the size of guassian kernel matrix 
+   */
 Eigen::MatrixXf generateGuassKernal(const int &sizes)
 {
   if((sizes%2)!=1)
@@ -335,8 +347,8 @@ public:
   
   Eigen::Vector3f lookup() const
   {
-    float score_Max=0;
-    Eigen::Vector3f beset_state;
+    float score_Max=score(poseWindowCentriod);
+    Eigen::Vector3f beset_state=poseWindowCentriod;
     for(int i=0;i<floor(poseWindowSizes(0)/x_resolution);i++) 
     {
       for(int j=0;j<floor(poseWindowSizes(1)/y_resolution);j++)
@@ -346,15 +358,18 @@ public:
 	  float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+i*x_resolution;
 	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+j*y_resolution;
 	  float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+k*orientation_resolution;
+	  /*
 	  tf::Transform tf_;
 	  tf::Quaternion q(0,0,sin(theta/2),cos(theta/2));
 	  tf::Vector3 Origin(pose_x,pose_y,0);	  
 	  tf_.setRotation(q);
 	  tf_.setOrigin(Origin);
-	  if(score(tf_)>score_Max)
+	  */
+	  Eigen:: Vector3f state(pose_x,pose_y,theta);
+	  if(score(state)>score_Max)
 	  {
-	    score_Max=score(tf_);
-	    Eigen::Vector3f state(pose_x,pose_y,theta);
+	    cout<<"发现一个更好的pose"<<endl;
+	    score_Max=score(state);
 	    beset_state=state;
 	  }
 	}
@@ -388,6 +403,27 @@ public:
      if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
      tf_score+=llfmap(temIndex(0),temIndex(1));     
   }    
+  }
+  
+  float score(const Eigen::Vector3f &tf_) const
+  {
+    float tf_score=0;        
+   for(int i=0;i<pc_base.points.size();i++)
+   {
+     assert(!pc_base.points.empty());
+     Eigen::Vector2i temIndex;
+     Eigen::Vector3f tempoint;
+     Eigen::Vector2f point2d;
+     tempoint<<pc_base.points[i].x, pc_base.points[i].y,0;
+     Eigen::Quaternion<float> q(cos(tf_(2)/2),0,0,sin(tf_(2)/2));
+     Eigen::Vector3f trans(tf_(0),tf_(1),0);
+     tempoint=q.toRotationMatrix()*tempoint+trans;
+     point2d<<tempoint(0),tempoint(1);
+     temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
+     if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
+     tf_score+=llfmap(temIndex(0),temIndex(1));     
+  }
+  return tf_score;
   }  
   
   /**
@@ -432,14 +468,23 @@ public:
   }
   
 private:
+  //搜索时x的分辨率
   float x_resolution;
+  //搜索时的分辨率
   float y_resolution;
+  //搜索时角度的分辨虚
   float orientation_resolution;
+  //窗的位置，由中心决定
   Eigen::Vector3f poseWindowCentriod;
+  //窗的尺寸，单位是米，认为传感器的误差越大，则窗应该设置的越大
   Eigen::Vector3f poseWindowSizes;
+  //目前不是相对的，得到的直接就是位姿
   Eigen::Vector3f relativePose;
-  sensor_msgs::PointCloud pc_base;;
+  //在base坐标系下的点云数据
+  sensor_msgs::PointCloud pc_base;
+  //似然场
  likelihoodFiled llf;
+ //存放似然场的地图信息
  Eigen::MatrixXf llfmap;
 };
 

@@ -57,7 +57,7 @@ void init()
   float pose_x_resolution, pose_y_resolution, pose_theta_resolution;
   nh.param<float>("pose_x_resolution",pose_x_resolution,0.03);
   nh.param<float>("pose_x_resolution",pose_y_resolution,0.03);
-  nh.param<float>("pose_x_resolution",pose_theta_resolution,1);
+  nh.param<float>("pose_x_resolution",pose_theta_resolution,1/180.f*3.14*2);
   pubGridMap=nh.advertise<nav_msgs::OccupancyGrid>("gridMap",1);
   pubpc=nh.advertise<sensor_msgs::PointCloud>("odompc",1);
   pubfixedPC=nh.advertise<sensor_msgs::PointCloud>("fixedPC",1);
@@ -99,7 +99,7 @@ bool scan2foopc( const sensor_msgs::LaserScan& curScan,const string &target_fram
       try{
 	    tf_listener.transformPointCloud(target_frame,pcin,pcout);
 	    transflag=true;
-	    cout<<"transform is ok"<<endl;
+	   // cout<<"transform is ok"<<endl;
 	}
      catch(tf::TransformException &ex)
        {
@@ -168,7 +168,9 @@ void run()
       //发布用odom转换得到的点云。
      pubpc.publish(odompc);
      
-     //csm
+     //*****************************************************
+     //csm的主要程序
+     //******************************************************
      if(!rcsm.llfIsEmpty())
      {
        Eigen::Vector3f poseWindowCentriod;
@@ -176,8 +178,8 @@ void run()
        {
 	 Eigen::Vector3f updatedPose;
          updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
-	 //preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,"odom");
-	 preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom");
+	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,"odom");
+	 //preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom"); //测试订阅里程计数据处理点云是否正确
 	 pubfixedPC.publish(fixedpc);
 	 cout<<"开始更新似然场"<<endl; 
 	 localmap=llf.update(fixedpc);
@@ -191,8 +193,14 @@ void run()
     
     //更新rcsm中的似然场
     rcsm.updataikehoodField(llf);
+    /**********************************************************/
     
-    // localmap=llf.update(odompc);
+    
+    //**************************************************************
+    //用栅格地图表示出似然场
+    //**************************************************************
+    
+    // localmap=llf.update(odompc);//用来测试各种转换是否正常
     //除以最大值，方便转换为OccupancyGrid表示
     localmap=localmap/localmap.maxCoeff();
     
