@@ -79,7 +79,7 @@ void  scan2pc(const sensor_msgs::LaserScan &scan, sensor_msgs::PointCloud &pcout
       pcout.header.stamp=scan.header.stamp;
 }
 
-void transformPC(const sensor_msgs::PointCloud& pcin, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
+void transformPointCloud(const sensor_msgs::PointCloud& pcin, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
 {
   if(!pcout.points.empty())
   {
@@ -92,30 +92,33 @@ void transformPC(const sensor_msgs::PointCloud& pcin, sensor_msgs::PointCloud &p
     initPoint<<pcin.points[i].x, pcin.points[i].y,0;
     geometry_msgs::Point32 tempoint;
     transformedPoint=q.toRotationMatrix()*initPoint+trans;
-    transformedPoint=q.toRotationMatrix().transpose()*initPoint+trans;
+   // transformedPoint=q.toRotationMatrix().transpose()*initPoint+trans;
     tempoint.x=transformedPoint(0); tempoint.y=transformedPoint(1);tempoint.z=0;
     pcout.points.push_back(tempoint); 
   }
      pcout.header.frame_id=target_frame;    
 }
 
+/*
+ * 有问题，不能这样做，因为laser frame到odom frame不仅仅只有俯仰角的变化，所以不能简单的用pose3d来代表transform
 void transformPC(const sensor_msgs::LaserScan &scan, sensor_msgs::PointCloud &pcout, const Eigen::Vector3f &pose3d,const string & target_frame)
 {
   sensor_msgs::PointCloud pcin;
   scan2pc(scan,pcin);
-  //pcout.points.clear();
+  pcout.points.clear();
   Eigen::Quaternion<float> q(cos(pose3d(2)/2), 0,0,sin(pose3d(2)/2));
   Eigen::Vector3f trans(pose3d(0),pose3d(1),0), transformedPoint, initPoint;
   for(int i=0;i<pcin.points.size();i++)
   {
     initPoint<<pcin.points[i].x, pcin.points[i].y,0;
     geometry_msgs::Point32 tempoint;
-    transformedPoint=q.toRotationMatrix()*initPoint+trans;
-    tempoint.x=transformedPoint(0); tempoint.y=transformedPoint(1);tempoint.z=0;
+    transformedPoint=q.toRotationMatrix().transpose()*initPoint+trans;
+    tempoint.x=transformedPoint(0); tempoint.y=-transformedPoint(1);tempoint.z=0;
     pcout.points.push_back(tempoint); 
   }
      pcout.header.frame_id=target_frame;    
 }
+*/
 
 }
 
@@ -371,12 +374,12 @@ public:
   float score(const tf::Transform &tf_) const
   {
     float tf_score=0;        
-   for(int i=0;i<currentPCinLaserFrame.points.size();i++)
+   for(int i=0;i<pc_base.points.size();i++)
    {
      Eigen::Vector2i temIndex;
      Eigen::Vector3f tempoint;
      Eigen::Vector2f point2d;
-     tempoint<<currentPCinLaserFrame.points[i].x, currentPCinLaserFrame.points[i].y,0;
+     tempoint<<pc_base.points[i].x, pc_base.points[i].y,0;
      Eigen::Quaternion<float> q(tf_.getRotation().w(),tf_.getRotation().x(),tf_.getRotation().y(),tf_.getRotation().z());
      Eigen::Vector3f trans(tf_.getOrigin().x(),tf_.getOrigin().y(),tf_.getOrigin().z());
      tempoint=q.toRotationMatrix()*tempoint+trans;
@@ -410,9 +413,19 @@ public:
     }
   }
   
+  /*错误的做法
   Eigen::Vector3f getCorrelativePose(const sensor_msgs::LaserScan & scan_,const Eigen::Vector3f &poseWindowCentriod_)
   {
     preDeal::scan2pc(scan_,currentPCinLaserFrame);
+    poseWindowCentriod=poseWindowCentriod_;
+    relativePose=lookup();
+    return relativePose;
+  }
+  */
+  
+    Eigen::Vector3f getCorrelativePose(const sensor_msgs::PointCloud & pc_base_,const Eigen::Vector3f &poseWindowCentriod_)
+  {
+    pc_base=pc_base_;
     poseWindowCentriod=poseWindowCentriod_;
     relativePose=lookup();
     return relativePose;
@@ -425,7 +438,7 @@ private:
   Eigen::Vector3f poseWindowCentriod;
   Eigen::Vector3f poseWindowSizes;
   Eigen::Vector3f relativePose;
-  sensor_msgs::PointCloud currentPCinLaserFrame;
+  sensor_msgs::PointCloud pc_base;;
  likelihoodFiled llf;
  Eigen::MatrixXf llfmap;
 };

@@ -109,13 +109,33 @@ bool scan2foopc( const sensor_msgs::LaserScan& curScan,const string &target_fram
     return transflag; 
 }
 
+/**
+ * \brief 得到转换关系，如果成功则返回true， 否则返回false
+ */
+bool getTransform(const string &target_frame, const string &source_frame, const ros::Time&time, tf::StampedTransform &pose)
+{
+  bool flag=false;
+  try{
+    tf_listener.lookupTransform(target_frame,source_frame,time,pose);
+    flag=true;
+  }
+  catch(tf::LookupException &ex)
+  {
+	ROS_ERROR("%s",ex.what());
+	ros::Duration(1.0).sleep();  
+  }
+  return flag;
+}
 
-bool getPose(const string &target_frame, const string &source_frame, const ros::Time&time, Eigen::Vector3f &pose)
+/**
+ * \brief 得到base在里程计下的3个自由度的位姿，注意适用于二维的情况
+ */
+bool getOdomPose(const string & odom_frame,const string &base_frame,const ros::Time&time, Eigen::Vector3f &pose)
 {
   tf::StampedTransform odompose;
   bool flag=false;
   try{
-    tf_listener.lookupTransform(target_frame,source_frame,time,odompose);
+    tf_listener.lookupTransform(odom_frame,base_frame,time,odompose);
     flag=true;
   }
   catch(tf::LookupException &ex)
@@ -140,15 +160,10 @@ void run()
     //是有问题的，上次的激光数据没有清零
    if(!current_scan.ranges.empty())
    {     
-   /*
-    Eigen::Vector3f poseWindowCentriod;
-    poseWindowCentriod<<laser2odom.getOrigin().getX(),laser2odom.getOrigin().getY(),2*acos(laser2odom.getRotation().getW());*/
-    //创建似然场
-    //cout<<windowsize<<endl;
 
-    sensor_msgs::PointCloud odompc,fixedpc; 
+    sensor_msgs::PointCloud odompc,fixedpc, pc_base; 
     Eigen::MatrixXf localmap;
-    if(scan2foopc(current_scan,"odom",odompc))
+    if(scan2foopc(current_scan,"odom",odompc)&&scan2foopc(current_scan,"base_link",pc_base))
     {
       //发布用odom转换得到的点云。
      pubpc.publish(odompc);
@@ -157,26 +172,32 @@ void run()
      if(!rcsm.llfIsEmpty())
      {
        Eigen::Vector3f poseWindowCentriod;
-       if(getPose("odom","laser",ros::Time(0),poseWindowCentriod))
+       if(getOdomPose("odom","base_link",ros::Time(0),poseWindowCentriod))
        {
 	 Eigen::Vector3f updatedPose;
-         updatedPose=rcsm.getCorrelativePose(current_scan,poseWindowCentriod);
-	 //preDeal::transformPC(current_scan,fixedpc,updatedPose,"odom");
-	 preDeal::transformPC(current_scan,fixedpc,poseWindowCentriod,"odom");
+         updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
+	 //preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,"odom");
+	 preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom");
 	 pubfixedPC.publish(fixedpc);
+	 cout<<"开始更新似然场"<<endl; 
 	 localmap=llf.update(fixedpc);
        }
     }
     else
     {
+       cout<<"开始更新似然场"<<endl; 
       localmap=llf.update(odompc);
     }
     
-    cout<<"开始更新似然场"<<endl;     
+    //更新rcsm中的似然场
+    rcsm.updataikehoodField(llf);
+    
     // localmap=llf.update(odompc);
+    //除以最大值，方便转换为OccupancyGrid表示
     localmap=localmap/localmap.maxCoeff();
-    Eigen::MatrixXf gaussK;
+    
     //标记一下矩阵原点附近
+    Eigen::MatrixXf gaussK;
    gaussK= llf.generateGuassKernal(9);
    localmap.block(10,10,9,9)=gaussK;
  
@@ -202,22 +223,23 @@ void run()
     //注意，在官方文件中说是row-major order. 也就是说是行元素的内存是连续的。但是行主序去赋值，画出来的图有问题，由于Eigen存储矩阵采用的是列主序，ROS都是基于Eigen写的，所以我认为实际是列主序才对
     OG.info.origin.position=mapPosition;
     OG.info.origin.orientation=map_orientation;
+    assert(localmap.rows()>0);
     for(int i=0;i<localmap.rows();i++)
     {
       for(int j=0;j<localmap.cols();j++)
       {
-	if(localmap(i,j)==0)
+	if(localmap(j,i)==0)
 	{
 	  OG.data.push_back(-1);
 	}
 	else
 	{
-	  OG.data.push_back(100-ceil(localmap(i,j)*100));
+	  OG.data.push_back(100-ceil(localmap(j,i)*100));
 	}
       }
     }
     pubGridMap.publish(OG);
-    rcsm.updataikehoodField(llf);
+
     }
     r.sleep();
    }
