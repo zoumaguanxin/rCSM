@@ -61,6 +61,9 @@ void init()
   nh.param<float>("pose_x_resolution",pose_x_resolution,0.03);
   nh.param<float>("pose_x_resolution",pose_y_resolution,0.03);
   nh.param<float>("pose_x_resolution",pose_theta_resolution,1/180.f*3.14*2);
+  nh.param<string>("odom_frame",odom_frame_,"odom");
+  nh.param<string>("laser_frame",laser_frame_,"laser");
+  nh.param<string>("base_frame",base_frame_,"base_link");
   pubGridMap=nh.advertise<nav_msgs::OccupancyGrid>("gridMap",1);
   pubpc=nh.advertise<sensor_msgs::PointCloud>("odompc",1);
   pubfixedPC=nh.advertise<sensor_msgs::PointCloud>("fixedPC",1);
@@ -166,7 +169,7 @@ void run()
 
     sensor_msgs::PointCloud odompc,fixedpc, pc_base; 
     Eigen::MatrixXf localmap;
-    if(scan2foopc(current_scan,"odom",odompc)&&scan2foopc(current_scan,"base_link",pc_base))
+    if(scan2foopc(current_scan,odom_frame_,odompc)&&scan2foopc(current_scan,base_frame_,pc_base))
     {
       //发布用odom转换得到的点云。
      pubpc.publish(odompc);
@@ -177,11 +180,11 @@ void run()
      if(!rcsm.llfIsEmpty())
      {
        Eigen::Vector3f poseWindowCentriod;
-       if(getOdomPose("odom","base_link",ros::Time(0),poseWindowCentriod))
+       if(getOdomPose(odom_frame_,base_frame_,ros::Time(0),poseWindowCentriod))
        {
 	 Eigen::Vector3f updatedPose;
          updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
-	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,"odom");
+	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,odom_frame_);
 	 //preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom"); //测试订阅里程计数据处理点云是否正确
 	 pubfixedPC.publish(fixedpc);
 	 cout<<"开始更新似然场"<<endl; 
@@ -215,7 +218,7 @@ void run()
    //用栅格地图表示出似然场
     nav_msgs::OccupancyGrid OG;
     OG.header.stamp=ros::Time::now();
-    OG.header.frame_id="odom";
+    OG.header.frame_id=odom_frame_;
     OG.info.height=localmapsize;
     OG.info.width=localmapsize;
     OG.info.resolution=map_resolution;
@@ -260,19 +263,30 @@ void run()
 
   
 private:
+  //坐标系定义
+ string odom_frame_, laser_frame_, base_frame_;
 ros::NodeHandle nh;
 sensor_msgs::LaserScan current_scan;
+//高斯核矩阵的大小
 int windowsize;
-int localmapsize;
-csm::CorrelativeMatch rcsm;
-csm::likelihoodFiled llf;
-tf::TransformListener tf_listener;
-float map_resolution;
+//二维高斯分布中的标准差
 float sigma;
+//地图的大小
+int localmapsize;
+//rcsm, 注意没有生成协方差
+csm::CorrelativeMatch rcsm;
+//似然场
+csm::likelihoodFiled llf;
+//关键，注意这个是可以作为参数传递给其他函数的，相当于它自身里有一个容器，它存储了一段时间内tf变换
+tf::TransformListener tf_listener;
+//地图分辨率
+float map_resolution;
+//位姿的搜索空间大小
 Eigen::Vector3f poseWindowsize;
 //订阅消息，必须具有静态生命周期，所以选择写为类的私有成员，在主程序中由于类的对象具有静态生命周期
 //所以该订阅者都具有静态生命周期，保证了在程序运行期间，该订阅者一直存在
 ros::V_Subscriber V_sub;
+//发布着
 ros::Publisher pubGridMap,pubpc, pubfixedPC;
 };
 
