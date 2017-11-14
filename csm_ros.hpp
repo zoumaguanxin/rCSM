@@ -7,9 +7,37 @@
 #include<tf2_ros/buffer.h>
 #include<octomap_msgs/Octomap.h>
 #include<nav_msgs/OccupancyGrid.h>
+#include<ctime>
+#include <queue>
 
 
-#define pi 3.1415926  
+#define pi 3.1415926
+
+void operator+=(std::queue<sensor_msgs::PointCloud> &pcqueue, const sensor_msgs::PointCloud& pc_right)
+{
+  if(pcqueue.size()<10)
+  {
+    pcqueue.push(pc_right);
+  }
+  else{
+    pcqueue.pop();
+    pcqueue.push(pc_right);
+  }
+}
+
+void operator+=(sensor_msgs::PointCloud & pc_left,const sensor_msgs::PointCloud &pc_right)
+{
+  sensor_msgs::PointCloud temppc(pc_left);
+ cout<<"temppc max size "<<temppc.points.max_size()<<endl;
+  cout<<"pc_right size "<<pc_right.points.size()<<endl;
+  for(int i=0;i<pc_right.points.size();i++)
+  {
+    pc_left.points.push_back(pc_right.points[i]);
+  }
+ pc_left.header.stamp=pc_right.header.stamp;
+ cout<<"temppc size: "<<pc_left.points.size()<<endl;
+ //return  temppc;
+}
 
 namespace CSM_ROS{
 
@@ -54,12 +82,15 @@ void init()
   nh.param<int>("localmapsize",localmapsize,800);
   nh.param<float>("map_resolution",map_resolution,0.05);
   nh.param<float>("sigma",sigma,0.1);
-  nh.param<float>("poseWindowsize_x",poseWindowsize(0),0.3);
-  nh.param<float>("poseWindowsize_y",poseWindowsize(1),0.3);
-  nh.param<float>("poseWindowsize_theta",poseWindowsize(2),pi/3.f);
+  nh.param<float>("poseWindowsize_x",poseWindowsize(0),0.5);
+  nh.param<float>("poseWindowsize_y",poseWindowsize(1),0.5);
+  nh.param<float>("poseWindowsize_theta",poseWindowsize(2),pi/2.f);
+  nh.param<string>("searchMethod",searchMethod,"slice");
+  float favor_threshod;
+  nh.param<float>("favor_threhod",favor_threshod,1.0);
   float pose_x_resolution, pose_y_resolution, pose_theta_resolution;
-  nh.param<float>("pose_x_resolution",pose_x_resolution,0.03);
-  nh.param<float>("pose_x_resolution",pose_y_resolution,0.03);
+  nh.param<float>("pose_x_resolution",pose_x_resolution,0.05);
+  nh.param<float>("pose_x_resolution",pose_y_resolution,0.05);
   nh.param<float>("pose_x_resolution",pose_theta_resolution,1/180.f*3.14*2);
   nh.param<string>("odom_frame",odom_frame_,"odom");
   nh.param<string>("laser_frame",laser_frame_,"laser");
@@ -67,12 +98,16 @@ void init()
   pubGridMap=nh.advertise<nav_msgs::OccupancyGrid>("gridMap",1);
   pubpc=nh.advertise<sensor_msgs::PointCloud>("odompc",1);
   pubfixedPC=nh.advertise<sensor_msgs::PointCloud>("fixedPC",1);
-   csm::likelihoodFiled llf_(windowsize,sigma,map_resolution,localmapsize);
-   csm::CorrelativeMatch rcsm_(poseWindowsize);
-   rcsm=rcsm_;
-   rcsm.setParam(pose_x_resolution,pose_y_resolution,pose_theta_resolution);
-   llf=llf_;
+   //csm::likelihoodFiled llf_(windowsize,sigma,map_resolution,localmapsize);
+   //csm::CorrelativeMatch rcsm;
+   rcsm.setSearchWindowSizes(poseWindowsize);
+   rcsm.setSearchStepLength(pose_x_resolution,pose_y_resolution,pose_theta_resolution);
+   rcsm.setSearchMethod(searchMethod);
+   rcsm.setFavorThreshod(favor_threshod);
+   llf.setParams(windowsize,sigma,map_resolution,localmapsize);
 }
+
+
 
 /**
  * \brief this function is responsible for transforming scan into point cloud data in any target frame
@@ -155,60 +190,15 @@ bool getOdomPose(const string & odom_frame,const string &base_frame,const ros::T
   return flag;
 }
 
-
-void run()
-{  
-
-  ros::Rate r(50);
- while(ros::ok())
- {
-    ros::spinOnce();
-    //是有问题的，上次的激光数据没有清零
-   if(!current_scan.ranges.empty())
-   {     
-
-    sensor_msgs::PointCloud odompc,fixedpc, pc_base; 
-    Eigen::MatrixXf localmap;
-    if(scan2foopc(current_scan,odom_frame_,odompc)&&scan2foopc(current_scan,base_frame_,pc_base))
-    {
-      //发布用odom转换得到的点云。
-     pubpc.publish(odompc);
-     
-     //*****************************************************
-     //csm的主要程序
-     //******************************************************
-     if(!rcsm.llfIsEmpty())
-     {
-       Eigen::Vector3f poseWindowCentriod;
-       if(getOdomPose(odom_frame_,base_frame_,ros::Time(0),poseWindowCentriod))
-       {
-	 Eigen::Vector3f updatedPose;
-         updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
-	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,odom_frame_);
-	 //preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom"); //测试订阅里程计数据处理点云是否正确
-	 pubfixedPC.publish(fixedpc);
-	 cout<<"开始更新似然场"<<endl; 
-	 localmap=llf.update(fixedpc);
-       }
-    }
-    else
-    {
-       cout<<"开始更新似然场"<<endl; 
-      localmap=llf.update(odompc);
-    }
-    
-    //更新rcsm中的似然场
-    rcsm.updataikehoodField(llf);
-    /**********************************************************/
-    
-    
-    //**************************************************************
+void publishGridMap(const Eigen::MatrixXf & localmap_)
+{
+     //**************************************************************
     //用栅格地图表示出似然场
     //**************************************************************
     
     // localmap=llf.update(odompc);//用来测试各种转换是否正常
     //除以最大值，方便转换为OccupancyGrid表示
-    localmap=localmap/localmap.maxCoeff();
+  Eigen::MatrixXf localmap=localmap_/localmap_.maxCoeff();
     
     //标记一下矩阵原点附近
     Eigen::MatrixXf gaussK;
@@ -252,14 +242,81 @@ void run()
 	}
       }
     }
-    pubGridMap.publish(OG);
+    pubGridMap.publish(OG);  
+}
 
+
+void run()
+{  
+
+  ros::Rate r(50);
+  sensor_msgs::PointCloud fixedpc_all;
+ while(ros::ok())
+ { 
+    current_scan.ranges.clear();
+    ros::spinOnce();
+    //是有问题的，上次的激光数据没有清零
+   if(!current_scan.ranges.empty())
+   {     
+
+    sensor_msgs::PointCloud odompc,fixedpc, pc_base; 
+    Eigen::MatrixXf localmap;
+    if(scan2foopc(current_scan,odom_frame_,odompc)&&scan2foopc(current_scan,base_frame_,pc_base))
+    {
+      //发布用odom转换得到的点云。
+     pubpc.publish(odompc);
+     cout<<"成功处理为点云"<<endl;
+     
+     //*****************************************************
+     //csm的主要程序
+     //******************************************************
+     time_t start, finish;
+     start=clock();
+     if(!rcsm.llfIsEmpty())
+     {
+       Eigen::Vector3f poseWindowCentriod;
+       if(getOdomPose(odom_frame_,base_frame_,ros::Time(0),poseWindowCentriod))
+       {
+	 Eigen::Vector3f updatedPose;
+         updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
+	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,odom_frame_);
+	 if(fixedpc_all.points.empty())
+	 {
+	   fixedpc_all=fixedpc;
+	   }
+	 else{	   
+	  fixedpc_all+=fixedpc;
+	 }
+	 //preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom"); //测试订阅里程计数据处理点云是否正确
+	 pubfixedPC.publish(fixedpc_all);
+	 cout<<"开始更新似然场"<<endl; 
+	 localmap=llf.update(fixedpc_all);
+       }
+    }
+    else
+    {
+       cout<<"开始更新似然场"<<endl; 
+      localmap=llf.update(odompc);
+    }
+    finish=clock();
+    cout<<"运行时间："<<(double)(finish-start)/CLOCKS_PER_SEC;
+    //更新rcsm中的似然场
+    rcsm.updataikehoodField(llf);
+    /**********************************************************/
+    
+    
+    //**************************************************************
+    //用栅格地图表示出似然场
+    //**************************************************************
+    
+    // localmap=llf.update(odompc);//用来测试各种转换是否正常
+    //除以最大值，方便转换为OccupancyGrid表示
+    publishGridMap(localmap);
     }
     r.sleep();
    }
  }
 }
-
 
   
 private:
@@ -273,6 +330,8 @@ int windowsize;
 float sigma;
 //地图的大小
 int localmapsize;
+//搜索方法
+string searchMethod;
 //rcsm, 注意没有生成协方差
 csm::CorrelativeMatch rcsm;
 //似然场

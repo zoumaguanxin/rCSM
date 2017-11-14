@@ -3,6 +3,7 @@
 
 #include<assert.h>
 #include<vector>
+#include<cstdlib>
 
 #include<sensor_msgs/LaserScan.h>
 #include<sensor_msgs/PointCloud.h>
@@ -51,6 +52,19 @@ public:
    * TODO 复制构造函数
    * 
    */
+  
+ void setParams(const float& Windowsizes_,
+		  const float  &sigma_ ,const float &map_resolution_ , const int &mapSizes_)
+  {
+    Windowsizes=Windowsizes_;
+    mapSizes=mapSizes_;
+    sigma=sigma_;
+    map_resolution=map_resolution_;
+    Eigen::MatrixXf map_(mapSizes_,mapSizes_);
+    likehoodFiledMap=map_.setZero();
+    map_origin<<int(mapSizes/2), int(mapSizes/2);
+    guassK=generateGuassKernal(Windowsizes);
+  }
   
   /*
  float preScore(const Eigen::Vector2i& point)
@@ -122,7 +136,31 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
       //cout<<Windowsizes<<endl;
       assert(size_girdType>0);
       assert((centriod_gridType(0)-size_girdType/2)>0);
-   
+     int x=centriod_gridType(0)-size_girdType/2;
+     int y=centriod_gridType(1)-size_girdType/2;
+     
+     //likehoodFiledMap.block(x,y,size_girdType,size_girdType)+=guassK;
+     /*
+     for(int i=centriod_gridType(0)-size_girdType/2,m=0;i<centriod_gridType(0)+size_girdType/2;i++,m++)
+      {
+	for(int j=centriod_gridType(1)-size_girdType/2,n=0;j<=centriod_gridType(1)+size_girdType/2;j++,n++)
+	{
+	    if(m>=Windowsizes||n>=Windowsizes)
+	    {
+	      cout<<"矩阵索引超出边界"<<endl;
+	      assert(m<Windowsizes&&n<Windowsizes);
+	    }
+	   likehoodFiledMap(i,j)+=guassK(m,n);
+	   if(likehoodFiledMap(i,j)>10*getMaxCoffsGuassianK())
+	   {
+	     likehoodFiledMap(i,j)=10*getMaxCoffsGuassianK();
+	  }	  
+	}
+      }
+      */
+      
+      
+      
       for(int i=centriod_gridType(0)-size_girdType/2,m=0;i<centriod_gridType(0)+size_girdType/2;i++,m++)
       {
 	for(int j=centriod_gridType(1)-size_girdType/2,n=0;j<=centriod_gridType(1)+size_girdType/2;j++,n++)
@@ -136,16 +174,8 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 	    }
 	    likehoodFiledMap(i,j)=guassK(m,n);
 	  }
-	  /*
-	   Eigen::Vector2i point(i,j);
-	  if(preScore(point)>likehoodFiledMap(i,j))
-	  {
-	       likehoodFiledMap(i,j)=preScore(point);
-	    // cout<<"score:"<<i<<" ,"<<j<<" "<<"score:"<<likehoodFiledMap(i,j)<<endl;
-	  }
-	  */
 	}
-      }      
+      }  
     }    
       return true;
   }
@@ -157,6 +187,23 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
    * \brief 是用点云更新，点云必须是已经为地图坐标系下
    */
   Eigen::MatrixXf update(const sensor_msgs::PointCloud &mapPC)
+  {
+    assert(mapPC.points.size()>0);
+    point_cloud=mapPC;
+    if(likehoodFiledMap.rows()!=mapSizes)
+    {
+      likehoodFiledMap.resize(mapSizes,mapSizes);
+    }
+    likehoodFiledMap.setZero();
+    if(smear())
+   return likehoodFiledMap;
+  }
+  
+  
+  /**
+   * 初始化为零，重新创建
+   */
+    Eigen::MatrixXf create(const sensor_msgs::PointCloud &mapPC)
   {
     assert(mapPC.points.size()>0);
     point_cloud=mapPC;
@@ -186,6 +233,11 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
     return map_origin;
   }
   
+  inline float getMaxCoffsGuassianK() const
+  {
+    return guassK.maxCoeff();
+  }
+  
 private:
 
    float map_resolution;
@@ -212,7 +264,10 @@ private:
 class CorrelativeMatch{
   
 public:
-  CorrelativeMatch()  {}
+  CorrelativeMatch()  {
+    searchMethod="brute force";
+    favor_threshold=1.0;
+  }
   
   CorrelativeMatch( Eigen::Vector3f poseWindowSizes_)
   {
@@ -224,8 +279,12 @@ public:
    * TODO
    * 
    */
+  void setSearchWindowSizes(Eigen::Vector3f poseWindowSizes_)
+  {
+    poseWindowSizes=poseWindowSizes_;
+  }
   
-  void setParam(const float &x_resolution_, const float &y_resolution_,const float &orientation_resolution_)
+  void setSearchStepLength(const float &x_resolution_, const float &y_resolution_,const float &orientation_resolution_)
   {
     assert(x_resolution_>0&&y_resolution_>0&&orientation_resolution_>0);
     x_resolution=x_resolution_;
@@ -233,23 +292,37 @@ public:
     orientation_resolution=orientation_resolution_;
   }
   
+  void setSearchMethod(const string &searchMethod_)
+  {
+    searchMethod=searchMethod_;
+  }
+  
+  void setFavorThreshod(const float &percent)
+  {
+    favor_threshold=percent;
+  }
+ 
  
  /**
-  * TODO
-  */
-  
-  Eigen::Vector3f lookup() const
+  * 使用暴力查找的方法
+  */  
+  Eigen::Vector3f BruteForceLookup() const
   {
+    float bound=pc_base.points.size()*favor_threshold*llf.getMaxCoffsGuassianK();
     float score_Max=score(poseWindowCentriod);
+    if(score_Max>bound)
+    {
+      return poseWindowCentriod;
+    }
     Eigen::Vector3f beset_state=poseWindowCentriod;
     for(int i=0;i<floor(poseWindowSizes(0)/x_resolution);i++) 
     {
+       float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+i*x_resolution;
       for(int j=0;j<floor(poseWindowSizes(1)/y_resolution);j++)
       {
-	for(int k=0;k<floor(poseWindowSizes(2)/orientation_resolution);k++)
-	{
-	  float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+i*x_resolution;
 	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+j*y_resolution;
+	for(int k=0;k<floor(poseWindowSizes(2)/orientation_resolution);k++)
+	{	
 	  float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+k*orientation_resolution;
 	  /*
 	  tf::Transform tf_;
@@ -259,11 +332,16 @@ public:
 	  tf_.setOrigin(Origin);
 	  */
 	  Eigen:: Vector3f state(pose_x,pose_y,theta);
-	  if(score(state)>score_Max)
+	  float scoreValue=score(state);
+	  if(scoreValue>score_Max&&scoreValue<=bound)
 	  {
 	    cout<<"发现一个更好的pose"<<endl;
-	    score_Max=score(state);
+	    score_Max=scoreValue;
 	    beset_state=state;
+	  }
+	  else if (scoreValue>bound)
+	  {
+	    return state;
 	  }
 	}
       }
@@ -272,16 +350,92 @@ public:
     //return poseWindowCentriod;
   }
   
+  
+  
+  //分片的目的是为了节约运行时间，如我们在旋转这一层先计算旋转，那么内部就可以少计算N*N次旋转，  
+   Eigen::Vector3f SilceLookup() const
+  {
+    float bound=pc_base.points.size()*favor_threshold*llf.getMaxCoffsGuassianK();
+    float score_Max=score(poseWindowCentriod);
+    if(score_Max>=bound)
+    {
+      return poseWindowCentriod;
+    }
+    
+    int theta_sizes=floor(poseWindowSizes(2)/orientation_resolution);
+    int x_sizes=floor(poseWindowSizes(0)/x_resolution);
+    int y_sizes=floor(poseWindowSizes(1)/y_resolution);
+    
+    
+    Eigen::Vector3f best_state=poseWindowCentriod;
+ 
+    
+    
+    
+    for(int i=0;i<theta_sizes;i++) 
+    {
+       sensor_msgs::PointCloud TransformedPC;
+      float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+i*orientation_resolution;
+      Eigen::Quaternion<float> q(cos(theta)/2,0,0,sin(theta)/2);
+       for(int i_=0;i_<pc_base.points.size();i_++)
+	{	
+	    Eigen::Vector3f tempoint;
+	    tempoint<<pc_base.points[i_].x, pc_base.points[i_].y,0;
+	    tempoint=q.toRotationMatrix()*tempoint;
+	     geometry_msgs::Point32 tempointx;
+	  tempointx.x=tempoint(0);tempointx.y=tempoint(1);tempointx.z=0;
+	  TransformedPC.points.push_back(tempointx);
+	} 
+      
+      for(int j=0;j<x_sizes;j++)
+      {
+	float pose_x=poseWindowCentriod(0)-poseWindowSizes(0)/2+j*x_resolution;
+	  
+	for(int k=0;k<y_sizes;k++)
+	{	  
+	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+k*y_resolution;
+	  float sum=1;
+	 for(int ii=0;ii<TransformedPC.points.size();ii++)
+	{   
+	  Eigen::Vector2i temIndex;
+	  Eigen::Vector2f point2d;
+	  point2d(0)=TransformedPC.points[ii].x+pose_x;
+	  point2d(1)=TransformedPC.points[ii].y+pose_y;	  
+	   temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
+	  if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
+	  sum*=llfmap(temIndex(0),temIndex(1));	    
+	} 
+	  Eigen:: Vector3f state(pose_x,pose_y,theta);
+	  if(sum>score_Max&&sum<=bound)
+	  {
+	    cout<<"发现一个更好的pose"<<endl;
+	    score_Max=sum;
+	    best_state=state;
+	  }
+	  else if (sum>bound)
+	  {
+	    return state;
+	  }
+	}
+      }
+    }
+    return best_state;
+  }
+  
+  
+  
+  
+  
   //在点云常用的缩写是pc
   //需要验证，ros中所有的stampTransform代表的意思都是得到转换关系都是把child_frame_id数据处理到frame_id下，而且设置transform时，也是必须按照这个设置
   
   /**
-   * \brief 对转换关系进行打分，分值等于所有的激光hits的点被转换到map坐标系下，在似然场中的分数的和
+   * \brief 对转换关系进行打分，分值等于所有的激光hits的点被转换到map坐标系下，在似然场中的分数的乘积，比用求和的效果要好
    * \param[in] tf_ laser到map的转换关系
    */
   float score(const tf::Transform &tf_) const
   {
-    float tf_score=0;        
+    float tf_score=1;        
    for(int i=0;i<pc_base.points.size();i++)
    {
      Eigen::Vector2i temIndex;
@@ -294,7 +448,7 @@ public:
      point2d<<tempoint(0),tempoint(1);
      temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
      if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
-     tf_score+=llfmap(temIndex(0),temIndex(1));     
+     tf_score*=llfmap(temIndex(0),temIndex(1));     
   }    
   }
   
@@ -356,7 +510,21 @@ public:
   {
     pc_base=pc_base_;
     poseWindowCentriod=poseWindowCentriod_;
-    relativePose=lookup();
+   if(searchMethod=="brute force" )
+   {
+     relativePose=BruteForceLookup();
+  }
+  else if(searchMethod=="slice")
+  {
+     relativePose=SilceLookup();
+  }
+  else
+  {
+    cout<<"没有相应的搜索方法可以匹配，请重新输入 "<<endl;
+    exit(0);
+  }
+    // relativePose=lookup();
+   
     return relativePose;
   }
   
@@ -379,6 +547,10 @@ private:
  likelihoodFiled llf;
  //存放似然场的地图信息
  Eigen::MatrixXf llfmap;
+ //搜索位姿的方法
+ string searchMethod;
+ //阈值
+ float favor_threshold;
 };
 
 
