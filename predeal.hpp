@@ -6,6 +6,8 @@
 #include<sensor_msgs/LaserScan.h>
 #include<sensor_msgs/PointCloud.h>
 #include<Eigen/Dense>
+#include<fstream>
+#include<pcl/common/common.h>
 using namespace std;
 
 namespace preDeal
@@ -96,8 +98,64 @@ void transformPointCloud(const sensor_msgs::PointCloud& pcin, sensor_msgs::Point
 }
 
 
+void vector3ftoRationTtrans(const Eigen::Vector3f& pose, Eigen::Matrix3f& R, Eigen::Vector3f& t)
+{
+   Eigen::Quaternion<float> q_w_target(cos(pose(2)/2),0,0,sin(pose(2)/2));
+   t(0)=pose(0);
+   t(1)=pose(1);
+   t(2)=0.0f;
+  R=q_w_target.toRotationMatrix();
+}
+
+void rotateTransToVector3f( Eigen::Vector3f& pose, const Eigen::Matrix3f& R, const Eigen::Vector3f& t)
+{
+  
+   
+ Eigen::Quaternion<float> q(R);
+        Eigen::Vector3f v;
+	//以下的处理非常重要，只适用于只存在偏航角的情况
+	float a1=acos(q.w());
+	float a2=-a1;
+	if(abs(sin(a1)-q.z())<0.001f)
+	{
+	  pose(2)=2*a1;
+
+	}
+	else if(abs(sin(a2)-q.z())<0.001f)
+	{
+	  pose(2)=2*a2;
+	  //cout<<v(2)<<endl;
+	}
+	else{
+	  cout<<"四元数解析错误，该旋转轴不为z轴"<<endl;
+	  exit(0);
+	}
+
+    pose(1)=t(1);
+    pose(0)=t(0);
+  
+}
 
 
+void readpcdfile(const string& dir, pcl::PointCloud< pcl::PointXYZ >& pcd)
+{
+  ifstream file;
+  file.open(dir.c_str(), ios_base::in);
+  if(file.good())
+  {
+      while(file.good())
+      {
+	pcl::PointXYZ tempoint;
+	file>>tempoint.x>>tempoint.y>>tempoint.z;
+	pcd.push_back(tempoint);
+      }
+  }
+  else
+  {
+    cout<<"can't open the file in the specified dir"<<endl;
+    assert(file.good());
+  }
+}
 
 /*
  * 有问题，不能这样做，因为laser frame到odom frame不仅仅只有俯仰角的变化，所以不能简单的用pose3d来代表transform

@@ -49,7 +49,7 @@ public:
   }
   
   /*
-   * TODO Â§çÂà∂ÊûÑÈÄ†ÂáΩÊï∞
+   * TODO ∏¥÷∆ππ‘Ï∫Ø ˝
    * 
    */
   
@@ -86,40 +86,40 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 {
   if((sizes%2)!=1)
   {
-    cout<<"sizesÂøÖÈ°ªÊòØ‰∏Ä‰∏™Â•áÊï∞"<<endl;
+    cout<<"sizes±ÿ–Î «“ª∏ˆ∆Ê ˝"<<endl;
     assert((sizes%2)==1);
   }
   Eigen::MatrixXf K;
   K.resize(sizes,sizes);
-  //Âè™ËÆ°ÁÆó1/8ÁöÑÂÜÖÂÆπÔºåÂÖ∂‰ªñÂÖ®ÈÉ®Â§çÂà∂
+  //÷ªº∆À„1/8µƒƒ⁄»›£¨∆‰À˚»´≤ø∏¥÷∆
   for(int i=0;i<(sizes/2+1);i++)
   {
     for(int j=i;j<(sizes/2+1);j++)
     {
       Eigen::Vector2f temp;
       temp<<(sizes/2-i)*map_resolution,(sizes/2-j)*map_resolution;
-      K(i,j)=1/((2*3.141692f)*pow(sigma,2))*exp(-temp.squaredNorm()/(2*pow(sigma,2)));
-      //Ê≤øÁùÄ‰ª•Áü©ÈòµÂàóÊñπÂêë‰∏≠ÂøÉÁ∫øÂ§çÂà∂
+      K(i,j)=log(1/((2*3.141692f)*pow(sigma,2))*exp(-temp.squaredNorm()/(2*pow(sigma,2))));
+      //—ÿ◊≈“‘æÿ’Û¡–∑ΩœÚ÷––ƒœﬂ∏¥÷∆
       K(i,sizes-j-1)=K(i,j);
       if(i!=j)
       {
-      //Âõ†‰∏∫ÊòØÂØπËßíÁü©Èòµ,Â§çÂà∂ÂØπËßí
+      //“ÚŒ™ «∂‘Ω«æÿ’Û,∏¥÷∆∂‘Ω«
       K(j,i)=K(i,j);
       K(j,sizes-i-1)=K(j,i);
       }
       if((sizes-i-1)!=i)
       {
-      //‰ª•Áü©ÈòµÁöÑË°åÊñπÂêë‰∏∫‰∏≠ÂøÉÁ∫øËøõË°åÂ§çÂà∂
+      //“‘æÿ’Ûµƒ––∑ΩœÚŒ™÷––ƒœﬂΩ¯––∏¥÷∆
       K.block(sizes-i-1,0,1,sizes)=K.block(i,0,1,sizes);
       }
     }
   }
-  //Èô§‰ª•ÊúÄÂ§ßÊï∞ÔºåÂõ†‰∏∫Êàë‰ª¨Â∏åÊúõ‰∏≠ÂøÉÊòØÊúÄ‰∫ÆÁöÑ
+  //≥˝“‘◊Ó¥Û ˝£¨“ÚŒ™Œ“√«œ£Õ˚÷––ƒ «◊Ó¡¡µƒ
   return K/K.maxCoeff();
 }
  
  /**
-  * \brief ÂØπÊØè‰∏Ä‰∏™ÁÇπÈÉΩÂàõÂª∫‰∏Ä‰∏™‰ººÁÑ∂Âú∫Âå∫Âüü
+  * \brief ∂‘√ø“ª∏ˆµ„∂º¥¥Ω®“ª∏ˆÀ∆»ª≥°«¯”Ú
   */
  bool  smear()
   {
@@ -147,7 +147,7 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 	{
 	    if(m>=Windowsizes||n>=Windowsizes)
 	    {
-	      cout<<"Áü©ÈòµÁ¥¢ÂºïË∂ÖÂá∫ËæπÁïå"<<endl;
+	      cout<<"æÿ’ÛÀ˜“˝≥¨≥ˆ±ﬂΩÁ"<<endl;
 	      assert(m<Windowsizes&&n<Windowsizes);
 	    }
 	   likehoodFiledMap(i,j)+=guassK(m,n);
@@ -169,7 +169,7 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 	  {
 	    if(m>=Windowsizes||n>=Windowsizes)
 	    {
-	      cout<<"Áü©ÈòµÁ¥¢ÂºïË∂ÖÂá∫ËæπÁïå"<<endl;
+	      cout<<"æÿ’ÛÀ˜“˝≥¨≥ˆ±ﬂΩÁ"<<endl;
 	      assert(m<Windowsizes&&n<Windowsizes);
 	    }
 	    likehoodFiledMap(i,j)=guassK(m,n);
@@ -184,7 +184,7 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   
   
   /**
-   * \brief ÊòØÁî®ÁÇπ‰∫ëÊõ¥Êñ∞ÔºåÁÇπ‰∫ëÂøÖÈ°ªÊòØÂ∑≤Áªè‰∏∫Âú∞ÂõæÂùêÊ†áÁ≥ª‰∏ã
+   * \brief  «”√µ„‘∆∏¸–¬£¨µ„‘∆±ÿ–Î «“—æ≠Œ™µÿÕº◊¯±Íœµœ¬
    */
   Eigen::MatrixXf update(const sensor_msgs::PointCloud &mapPC)
   {
@@ -201,7 +201,7 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
   
   
   /**
-   * ÂàùÂßãÂåñ‰∏∫Èõ∂ÔºåÈáçÊñ∞ÂàõÂª∫
+   * ≥ı ºªØŒ™¡„£¨÷ÿ–¬¥¥Ω®
    */
     Eigen::MatrixXf create(const sensor_msgs::PointCloud &mapPC)
   {
@@ -241,21 +241,21 @@ Eigen::MatrixXf generateGuassKernal(const int &sizes)
 private:
 
    float map_resolution;
-   //Âå∫ÂüüÁöÑ‰∏≠ÂøÉ
+   //«¯”Úµƒ÷––ƒ
   Eigen::Vector2f centriod;
-  //Êõ¥Êñ∞ÁöÑÂå∫ÂüüÂ§ßÂ∞èÔºåWindowsizes * WindowsizesÁöÑÂå∫ÂüüÔºå‰∏∫Ê†ÖÊ†º‰∏™Êï∞ÔºåÂøÖÈ°ªËÆæÁΩÆ‰∏∫Â•áÊï∞ÔºåË°®Á§∫Âå∫Âüü
+  //∏¸–¬µƒ«¯”Ú¥Û–°£¨Windowsizes * Windowsizesµƒ«¯”Ú£¨Œ™’§∏Ò∏ˆ ˝£¨±ÿ–Î…Ë÷√Œ™∆Ê ˝£¨±Ì æ«¯”Ú
   int Windowsizes;
-  //Áî®Êù•ËÆ°ÁÆóÊ¶ÇÁéá
+  //”√¿¥º∆À„∏≈¬ 
   float sigma;
-  //Â≠òÊîæÁÇπ‰∫ëÔºåÁî®Êù•Êõ¥Êñ∞‰ººÁÑ∂Âú∫
+  //¥Ê∑≈µ„‘∆£¨”√¿¥∏¸–¬À∆»ª≥°
   sensor_msgs::PointCloud point_cloud;
-  //‰ººÁÑ∂Âú∫
+  //À∆»ª≥°
   Eigen::MatrixXf likehoodFiledMap;
-  //ÂÜ≥ÂÆö‰ººÁÑ∂Âú∫ÁöÑÂ§ßÂ∞è
+  //æˆ∂®À∆»ª≥°µƒ¥Û–°
   int mapSizes;
-  //Âú∞ÂõæÂùêÊ†áÁ≥ªÂéüÁÇπÂú®Áü©ÈòµÂùêÊ†áÁ≥ª‰∏ãÁöÑ‰ΩçÁΩÆÔºå‰∏ÄËà¨ËÆæÁΩÆ‰∏∫Âú®Áü©ÈòµÁöÑ‰∏≠ÂøÉ
+  //µÿÕº◊¯±Íœµ‘≠µ„‘⁄æÿ’Û◊¯±Íœµœ¬µƒŒª÷√£¨“ª∞„…Ë÷√Œ™‘⁄æÿ’Ûµƒ÷––ƒ
   Eigen::Vector2i map_origin;
-  //Â≠òÊîæÈ´òÊñØÊ†∏ÔºåÁî®‰∫éÊõ¥Êñ∞‰ººÁÑ∂Âú∫
+  //¥Ê∑≈∏ﬂÀπ∫À£¨”√”⁄∏¸–¬À∆»ª≥°
   Eigen::MatrixXf guassK;
 };
 
@@ -264,6 +264,12 @@ private:
 class CorrelativeMatch{
   
 public:
+	enum lookMethod
+	{
+		bruteForce,
+		slice2D,
+		MutiResolution
+	};
   CorrelativeMatch()  {
     searchMethod="brute force";
     favor_threshold=1.0;
@@ -275,7 +281,7 @@ public:
   }
   
   /*
-   * Â§çÂà∂ÊûÑÈÄ†ÂáΩÊï∞
+   * ∏¥÷∆ππ‘Ï∫Ø ˝
    * TODO
    * 
    */
@@ -304,7 +310,7 @@ public:
  
  
  /**
-  * ‰ΩøÁî®Êö¥ÂäõÊü•ÊâæÁöÑÊñπÊ≥ï
+  *  π”√±©¡¶≤È’“µƒ∑Ω∑®
   */  
   Eigen::Vector3f BruteForceLookup() const
   {
@@ -335,7 +341,7 @@ public:
 	  float scoreValue=score(state);
 	  if(scoreValue>score_Max&&scoreValue<=bound)
 	  {
-	    cout<<"ÂèëÁé∞‰∏Ä‰∏™Êõ¥Â•ΩÁöÑpose"<<endl;
+	    cout<<"∑¢œ÷“ª∏ˆ∏¸∫√µƒpose"<<endl;
 	    score_Max=scoreValue;
 	    beset_state=state;
 	  }
@@ -352,7 +358,7 @@ public:
   
   
   
-  //ÂàÜÁâáÁöÑÁõÆÁöÑÊòØ‰∏∫‰∫ÜËäÇÁ∫¶ËøêË°åÊó∂Èó¥ÔºåÂ¶ÇÊàë‰ª¨Âú®ÊóãËΩ¨Ëøô‰∏ÄÂ±ÇÂÖàËÆ°ÁÆóÊóãËΩ¨ÔºåÈÇ£‰πàÂÜÖÈÉ®Â∞±ÂèØ‰ª•Â∞ëËÆ°ÁÆóN*NÊ¨°ÊóãËΩ¨Ôºå  
+  //∑÷∆¨µƒƒøµƒ «Œ™¡ÀΩ⁄‘º‘À–– ±º‰£¨»ÁŒ“√«‘⁄–˝◊™’‚“ª≤„œ»º∆À„–˝◊™£¨ƒ«√¥ƒ⁄≤øæÕø…“‘…Ÿº∆À„N*N¥Œ–˝◊™£¨  
    Eigen::Vector3f SilceLookup() const
   {
     float bound=pc_base.points.size()*favor_threshold*llf.getMaxCoffsGuassianK();
@@ -360,21 +366,14 @@ public:
     if(score_Max>=bound)
     {
       return poseWindowCentriod;
-    }
-    
+    }    
     int theta_sizes=floor(poseWindowSizes(2)/orientation_resolution);
     int x_sizes=floor(poseWindowSizes(0)/x_resolution);
-    int y_sizes=floor(poseWindowSizes(1)/y_resolution);
-    
-    
-    Eigen::Vector3f best_state=poseWindowCentriod;
- 
-    
-    
-    
+    int y_sizes=floor(poseWindowSizes(1)/y_resolution);        
+    Eigen::Vector3f best_state=poseWindowCentriod;    
     for(int i=0;i<theta_sizes;i++) 
     {
-       sensor_msgs::PointCloud TransformedPC;
+       sensor_msgs::PointCloud RotatededPC;
       float theta=poseWindowCentriod(2)-poseWindowSizes(2)/2+i*orientation_resolution;
       Eigen::Quaternion<float> q(cos(theta)/2,0,0,sin(theta)/2);
        for(int i_=0;i_<pc_base.points.size();i_++)
@@ -384,7 +383,7 @@ public:
 	    tempoint=q.toRotationMatrix()*tempoint;
 	     geometry_msgs::Point32 tempointx;
 	  tempointx.x=tempoint(0);tempointx.y=tempoint(1);tempointx.z=0;
-	  TransformedPC.points.push_back(tempointx);
+	  RotatededPC.points.push_back(tempointx);
 	} 
       
       for(int j=0;j<x_sizes;j++)
@@ -395,20 +394,20 @@ public:
 	{	  
 	  float pose_y=poseWindowCentriod(1)-poseWindowSizes(1)/2+k*y_resolution;
 	  float sum=1;
-	 for(int ii=0;ii<TransformedPC.points.size();ii++)
+	 for(int ii=0;ii<RotatededPC.points.size();ii++)
 	{   
 	  Eigen::Vector2i temIndex;
 	  Eigen::Vector2f point2d;
-	  point2d(0)=TransformedPC.points[ii].x+pose_x;
-	  point2d(1)=TransformedPC.points[ii].y+pose_y;	  
+	  point2d(0)=RotatededPC.points[ii].x+pose_x;
+	  point2d(1)=RotatededPC.points[ii].y+pose_y;	  
 	   temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
 	  if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
-	  sum*=llfmap(temIndex(0),temIndex(1));	    
+	  sum+=llfmap(temIndex(0),temIndex(1));	    
 	} 
 	  Eigen:: Vector3f state(pose_x,pose_y,theta);
 	  if(sum>score_Max&&sum<=bound)
 	  {
-	    cout<<"ÂèëÁé∞‰∏Ä‰∏™Êõ¥Â•ΩÁöÑpose"<<endl;
+	    cout<<"∑¢œ÷“ª∏ˆ∏¸∫√µƒpose"<<endl;
 	    score_Max=sum;
 	    best_state=state;
 	  }
@@ -425,13 +424,12 @@ public:
   
   
   
-  
-  //Âú®ÁÇπ‰∫ëÂ∏∏Áî®ÁöÑÁº©ÂÜôÊòØpc
-  //ÈúÄË¶ÅÈ™åËØÅÔºåros‰∏≠ÊâÄÊúâÁöÑstampTransform‰ª£Ë°®ÁöÑÊÑèÊÄùÈÉΩÊòØÂæóÂà∞ËΩ¨Êç¢ÂÖ≥Á≥ªÈÉΩÊòØÊäächild_frame_idÊï∞ÊçÆÂ§ÑÁêÜÂà∞frame_id‰∏ãÔºåËÄå‰∏îËÆæÁΩÆtransformÊó∂Ôºå‰πüÊòØÂøÖÈ°ªÊåâÁÖßËøô‰∏™ËÆæÁΩÆ
+  //‘⁄µ„‘∆≥£”√µƒÀı–¥ «pc
+  //–Ë“™—È÷§£¨ros÷–À˘”–µƒstampTransform¥˙±Ìµƒ“‚Àº∂º «µ√µΩ◊™ªªπÿœµ∂º «∞—child_frame_id ˝æ›¥¶¿ÌµΩframe_idœ¬£¨∂¯«“…Ë÷√transform ±£¨“≤ «±ÿ–Î∞¥’’’‚∏ˆ…Ë÷√
   
   /**
-   * \brief ÂØπËΩ¨Êç¢ÂÖ≥Á≥ªËøõË°åÊâìÂàÜÔºåÂàÜÂÄºÁ≠â‰∫éÊâÄÊúâÁöÑÊøÄÂÖâhitsÁöÑÁÇπË¢´ËΩ¨Êç¢Âà∞mapÂùêÊ†áÁ≥ª‰∏ãÔºåÂú®‰ººÁÑ∂Âú∫‰∏≠ÁöÑÂàÜÊï∞ÁöÑ‰πòÁßØÔºåÊØîÁî®Ê±ÇÂíåÁöÑÊïàÊûúË¶ÅÂ•Ω
-   * \param[in] tf_ laserÂà∞mapÁöÑËΩ¨Êç¢ÂÖ≥Á≥ª
+   * \brief ∂‘◊™ªªπÿœµΩ¯––¥Ú∑÷£¨∑÷÷µµ»”⁄À˘”–µƒº§π‚hitsµƒµ„±ª◊™ªªµΩmap◊¯±Íœµœ¬£¨‘⁄À∆»ª≥°÷–µƒ∑÷ ˝µƒ≥Àª˝£¨±»”√«Û∫Õµƒ–ßπ˚“™∫√
+   * \param[in] tf_ laserµΩmapµƒ◊™ªªπÿœµ
    */
   float score(const tf::Transform &tf_) const
   {
@@ -448,7 +446,7 @@ public:
      point2d<<tempoint(0),tempoint(1);
      temIndex=preDeal::world2grid(llf.getMapResolution(),llf.getMapOrigin(),point2d);
      if(temIndex(0)>=0&&temIndex(0)<llfmap.rows() &&temIndex(1)>=0&&temIndex(1)<llfmap.cols())
-     tf_score*=llfmap(temIndex(0),temIndex(1));     
+     tf_score+=llfmap(temIndex(0),temIndex(1));     
   }    
   }
   
@@ -475,7 +473,7 @@ public:
   
   /**
    * \brief update likehood field
-   * \param[in] llf_ Áî®‰∫éËÆ°ÁÆóÁöÑ‰ººÁÑ∂Âú∫ 
+   * \param[in] llf_ ”√”⁄º∆À„µƒÀ∆»ª≥° 
    */
   void updataikehoodField(const likelihoodFiled &llf_)
   {
@@ -496,7 +494,7 @@ public:
     }
   }
   
-  /*ÈîôËØØÁöÑÂÅöÊ≥ï
+  /*¥ÌŒÛµƒ◊ˆ∑®
   Eigen::Vector3f getCorrelativePose(const sensor_msgs::LaserScan & scan_,const Eigen::Vector3f &poseWindowCentriod_)
   {
     preDeal::scan2pc(scan_,currentPCinLaserFrame);
@@ -520,7 +518,7 @@ public:
   }
   else
   {
-    cout<<"Ê≤°ÊúâÁõ∏Â∫îÁöÑÊêúÁ¥¢ÊñπÊ≥ïÂèØ‰ª•ÂåπÈÖçÔºåËØ∑ÈáçÊñ∞ËæìÂÖ• "<<endl;
+    cout<<"√ª”–œ‡”¶µƒÀ—À˜∑Ω∑®ø…“‘∆•≈‰£¨«Î÷ÿ–¬ ‰»Î "<<endl;
     exit(0);
   }
     // relativePose=lookup();
@@ -529,28 +527,40 @@ public:
   }
   
 private:
-  //ÊêúÁ¥¢Êó∂xÁöÑÂàÜËæ®Áéá
+  //À—À˜ ±xµƒ∑÷±Ê¬ 
   float x_resolution;
-  //ÊêúÁ¥¢Êó∂ÁöÑÂàÜËæ®Áéá
+  //À—À˜ ±µƒ∑÷±Ê¬ 
   float y_resolution;
-  //ÊêúÁ¥¢Êó∂ËßíÂ∫¶ÁöÑÂàÜËæ®Ëôö
+  //À—À˜ ±Ω«∂»µƒ∑÷±Ê–È
   float orientation_resolution;
-  //Á™óÁöÑ‰ΩçÁΩÆÔºåÁî±‰∏≠ÂøÉÂÜ≥ÂÆö
+  //¥∞µƒŒª÷√£¨”…÷––ƒæˆ∂®
   Eigen::Vector3f poseWindowCentriod;
-  //Á™óÁöÑÂ∞∫ÂØ∏ÔºåÂçï‰ΩçÊòØÁ±≥ÔºåËÆ§‰∏∫‰º†ÊÑüÂô®ÁöÑËØØÂ∑ÆË∂äÂ§ßÔºåÂàôÁ™óÂ∫îËØ•ËÆæÁΩÆÁöÑË∂äÂ§ß
+  //¥∞µƒ≥ﬂ¥Á£¨µ•Œª «√◊£¨»œŒ™¥´∏–∆˜µƒŒÛ≤Ó‘Ω¥Û£¨‘Ú¥∞”¶∏√…Ë÷√µƒ‘Ω¥Û
   Eigen::Vector3f poseWindowSizes;
-  //ÁõÆÂâç‰∏çÊòØÁõ∏ÂØπÁöÑÔºåÂæóÂà∞ÁöÑÁõ¥Êé•Â∞±ÊòØ‰ΩçÂßø
+  //ƒø«∞≤ª «œ‡∂‘µƒ£¨µ√µΩµƒ÷±Ω”æÕ «Œª◊À
   Eigen::Vector3f relativePose;
-  //Âú®baseÂùêÊ†áÁ≥ª‰∏ãÁöÑÁÇπ‰∫ëÊï∞ÊçÆ
+  //‘⁄base◊¯±Íœµœ¬µƒµ„‘∆ ˝æ›
   sensor_msgs::PointCloud pc_base;
-  //‰ººÁÑ∂Âú∫
+  //À∆»ª≥°
  likelihoodFiled llf;
- //Â≠òÊîæ‰ººÁÑ∂Âú∫ÁöÑÂú∞Âõæ‰ø°ÊÅØ
+ //¥Ê∑≈À∆»ª≥°µƒµÿÕº–≈œ¢
  Eigen::MatrixXf llfmap;
- //ÊêúÁ¥¢‰ΩçÂßøÁöÑÊñπÊ≥ï
+ //À—À˜Œª◊Àµƒ∑Ω∑®
  string searchMethod;
- //ÈòàÂÄº
+ //„–÷µ
  float favor_threshold;
+};
+
+
+class RealTimeCorrelativeScanMatch: public CorrelativeMatch
+{
+public:
+RealTimeCorrelativeScanMatch(){}
+
+private:
+Eigen::MatrixXf generateMultiResoltionMap()
+{}
+  
 };
 
 

@@ -14,5 +14,10 @@ Environment Profile=
 Extra Arguments=
 Install Directory=file:///usr/local
 
-[Project]
-VersionControlSupport=kdevgit
+[Defines And Includes][Compiler]
+Name=GCC
+Path=gcc
+Type=GCC
+
+[SourceFileTemplates]
+LastUsedTemplate=/home/shaoan/.kde/share/apps/kdevfiletemplates/template_descriptions/cpp_basic.desktop

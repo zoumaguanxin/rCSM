@@ -15,7 +15,7 @@
 
 void operator+=(std::queue<sensor_msgs::PointCloud> &pcqueue, const sensor_msgs::PointCloud& pc_right)
 {
-  if(pcqueue.size()<10)
+  if(pcqueue.size()<2)
   {
     pcqueue.push(pc_right);
   }
@@ -34,10 +34,27 @@ void operator+=(sensor_msgs::PointCloud & pc_left,const sensor_msgs::PointCloud 
   {
     pc_left.points.push_back(pc_right.points[i]);
   }
+ pc_left.header.frame_id=pc_right.header.frame_id;
  pc_left.header.stamp=pc_right.header.stamp;
  cout<<"temppc size: "<<pc_left.points.size()<<endl;
  //return  temppc;
 }
+
+
+
+
+void operator *=(Eigen::Vector3f &pose1, const Eigen::Vector3f &pose2)
+{
+  Eigen::Matrix3f R1,R2;
+  Eigen::Vector3f t1,t2;
+ preDeal::vector3ftoRationTtrans(pose1,R1,t1);
+ preDeal::vector3ftoRationTtrans(pose2,R2,t2);
+ R1=R1*R2;
+ t1=t1+R1*t2; 
+ preDeal::rotateTransToVector3f(pose1,R1,t1);
+}
+
+
 
 namespace CSM_ROS{
 
@@ -73,6 +90,7 @@ void callbackScan(sensor_msgs::LaserScan::ConstPtr scanPtr)
  * \param pose_x_resolution default 0.03
  * \param pose_y_resolution default 0.03
  * \param pose_theta_resolution default 1/180*3.14*2 
+ * @param searchMethod 
  */
 void init()
 {
@@ -82,10 +100,10 @@ void init()
   nh.param<int>("localmapsize",localmapsize,800);
   nh.param<float>("map_resolution",map_resolution,0.05);
   nh.param<float>("sigma",sigma,0.1);
-  nh.param<float>("poseWindowsize_x",poseWindowsize(0),0.5);
-  nh.param<float>("poseWindowsize_y",poseWindowsize(1),0.5);
-  nh.param<float>("poseWindowsize_theta",poseWindowsize(2),pi/2.f);
-  nh.param<string>("searchMethod",searchMethod,"slice");
+  nh.param<float>("searchWidth_x",poseWindowsize(0),0.5);
+  nh.param<float>("searchWidth_y",poseWindowsize(1),0.5);
+  nh.param<float>("searchWidth_theta",poseWindowsize(2),pi/6.f);
+  nh.param<string>("searchMethod",searchMethod,"brute force");
   float favor_threshod;
   nh.param<float>("favor_threhod",favor_threshod,1.0);
   float pose_x_resolution, pose_y_resolution, pose_theta_resolution;
@@ -170,6 +188,8 @@ bool getTransform(const string &target_frame, const string &source_frame, const 
 
 /**
  * \brief 得到base在里程计下的3个自由度的位姿，注意适用于二维的情况
+ * 注意，要把    pose(0)=odompose.getOrigin().x();    pose(1)=odompose.getOrigin().y();    pose(2)=tf::getYaw(odompose.getRotation());
+ * 写在try中，而不是写在外面，因为当没有查询到相关转移关系时,将不能对其进行处理。
  */
 bool getOdomPose(const string & odom_frame,const string &base_frame,const ros::Time&time, Eigen::Vector3f &pose)
 {
@@ -177,6 +197,9 @@ bool getOdomPose(const string & odom_frame,const string &base_frame,const ros::T
   bool flag=false;
   try{
     tf_listener.lookupTransform(odom_frame,base_frame,time,odompose);
+    pose(0)=odompose.getOrigin().x();
+    pose(1)=odompose.getOrigin().y();
+    pose(2)=tf::getYaw(odompose.getRotation());
     flag=true;
   }
   catch(tf::LookupException &ex)
@@ -184,9 +207,6 @@ bool getOdomPose(const string & odom_frame,const string &base_frame,const ros::T
 	ROS_ERROR("%s",ex.what());
 	ros::Duration(1.0).sleep();  
   }
-  pose(0)=odompose.getOrigin().x();
-  pose(1)=odompose.getOrigin().y();
-  pose(2)=tf::getYaw(odompose.getRotation());
   return flag;
 }
 
@@ -246,11 +266,17 @@ void publishGridMap(const Eigen::MatrixXf & localmap_)
 }
 
 
+
+
+
 void run()
 {  
 
   ros::Rate r(50);
   sensor_msgs::PointCloud fixedpc_all;
+  std::queue<sensor_msgs::PointCloud> TwoFrameScan;
+  bool begin=false;
+  Eigen::Vector3f pose;
  while(ros::ok())
  { 
     current_scan.ranges.clear();
@@ -259,12 +285,13 @@ void run()
    if(!current_scan.ranges.empty())
    {     
 
-    sensor_msgs::PointCloud odompc,fixedpc, pc_base; 
+    sensor_msgs::PointCloud odompc,fixedpc, pc_base;
+
     Eigen::MatrixXf localmap;
     if(scan2foopc(current_scan,odom_frame_,odompc)&&scan2foopc(current_scan,base_frame_,pc_base))
     {
       //发布用odom转换得到的点云。
-     pubpc.publish(odompc);
+     //pubpc.publish(odompc);
      cout<<"成功处理为点云"<<endl;
      
      //*****************************************************
@@ -277,9 +304,19 @@ void run()
        Eigen::Vector3f poseWindowCentriod;
        if(getOdomPose(odom_frame_,base_frame_,ros::Time(0),poseWindowCentriod))
        {
+
+	 if(begin==false)
+	 {
+	   pose.setZero();
+	   begin=true;
+	 }
+	poseWindowCentriod.setZero();
 	 Eigen::Vector3f updatedPose;
-         updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
-	 preDeal::transformPointCloud(pc_base,fixedpc,updatedPose,odom_frame_);
+        // updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
+	 updatedPose=rcsm.getCorrelativePose(pc_base,poseWindowCentriod);
+	 pose*=updatedPose;
+	 preDeal::transformPointCloud(pc_base,fixedpc,pose,odom_frame_);
+	 /*
 	 if(fixedpc_all.points.empty())
 	 {
 	   fixedpc_all=fixedpc;
@@ -287,10 +324,24 @@ void run()
 	 else{	   
 	  fixedpc_all+=fixedpc;
 	 }
+	 */
+	  TwoFrameScan+=fixedpc;
 	 //preDeal::transformPointCloud(pc_base,fixedpc,poseWindowCentriod,"odom"); //测试订阅里程计数据处理点云是否正确
-	 pubfixedPC.publish(fixedpc_all);
+	// pubfixedPC.publish(fixedpc_all);
+	  sensor_msgs::PointCloud fixed2pc;
+	  std::queue<sensor_msgs::PointCloud> pcdbackup;
+	  pcdbackup=TwoFrameScan;
+	  int n=pcdbackup.size();
+	for(int i=0;i<n;i++)
+	{
+	  fixed2pc+=pcdbackup.front();
+	  pcdbackup.pop();
+	}
+	    pubpc.publish(TwoFrameScan.front());
+	  pubfixedPC.publish(TwoFrameScan.back());
 	 cout<<"开始更新似然场"<<endl; 
-	 localmap=llf.update(fixedpc_all);
+	 //localmap=llf.update(fixedpc);
+	 localmap=llf.update(pc_base);
        }
     }
     else
